@@ -1,0 +1,507 @@
+{
+  "robot_city": {
+    "name": "🤖 Город роботов",
+    "gender": "universal",
+    "story": {
+      "theme": "robot_city",
+      "theme_name": "Город дружелюбных роботов",
+      "emoji": "🤖",
+      "stories": [
+        {
+          "id": "robot_city_1",
+          "title": "Пропавшая деталь",
+          "description": "Герой помогает найти важную деталь для робо-парка",
+          "scenes": [
+            {
+              "number": 1,
+              "title": "Строительство",
+              "text": "{name} строил город из кубиков. Вдруг одна золотая деталь засветилась и полетела к окну! {name} побежал следом.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, building with colorful blocks on floor, one golden piece glowing and floating upward, surprised expression, toys scattered around, Pixar animation style, Disney quality, magical moment"
+            },
+            {
+              "number": 2,
+              "title": "Погоня",
+              "text": "Деталь нарисовала в небе большой светящийся круг. Это был портал! {name} прыгнул внутрь.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, jumping through a glowing golden portal in the sky, chasing a shiny golden piece, clouds around, magical golden trail, Pixar animation style, Disney quality, adventurous and dynamic"
+            },
+            {
+              "number": 3,
+              "title": "Парк роботов",
+              "text": "{name} попал в огромный парк! Везде были роботы: катались на горках, играли в игры и веселились.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, landing in a futuristic robot amusement park, roller coasters with robotic riders, holographic games, colorful lights, carnival atmosphere but high-tech, Pixar animation style, Disney quality, exciting and vibrant"
+            },
+            {
+              "number": 4,
+              "title": "Знакомство со Спарком",
+              "text": "К {name_dat} подъехал оранжевый робот на колёсиках. «Привет! Я Спарк!» — сказал он. «Ты не видел золотую деталь?» — спросил {name}.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, meeting a small cheerful orange robot on wheels with expressive eyes, amusement park background with rides, friendly conversation, Pixar animation style, Disney quality, warm introduction"
+            },
+            {
+              "number": 5,
+              "title": "Важная деталь",
+              "text": "«Это деталь от нашего главного аттракциона!» — воскликнул Спарк. «Без неё ничего не работает! Давай найдём {его_её} вместе!»",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt and orange robot, looking up at a huge dark space-themed ride, rocket ship design, stars and planets decoration but turned off, disappointed robots waiting in line, Pixar animation style, Disney quality"
+            },
+            {
+              "number": 6,
+              "title": "Поиски",
+              "text": "{name} и Спарк искали деталь везде. Проверили карусели, заглянули под горки, обыскали игровую зону.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt and orange robot, searching through various futuristic attractions, UFO carousel, water slides, hologram arcade, detective work, Pixar animation style, Disney quality, adventure and mystery"
+            },
+            {
+              "number": 7,
+              "title": "Находка",
+              "text": "«Смотри!» — закричал Спарк. Деталь плавала в фонтане и красиво блестела!",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt and orange robot, discovering a glowing golden piece floating in a large futuristic fountain with light reflections, excited expressions, water effects, Pixar animation style, Disney quality, moment of discovery"
+            },
+            {
+              "number": 8,
+              "title": "Достаём деталь",
+              "text": "{name} взял длинную палку и аккуратно достал деталь из воды. «Ура! Мы нашли!» — радовался Спарк.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, using a long pole to fish out the golden piece from fountain, orange robot nearby cheering, teamwork and problem-solving, Pixar animation style, Disney quality, clever solution"
+            },
+            {
+              "number": 9,
+              "title": "Аттракцион работает",
+              "text": "Спарк вставил деталь. Аттракцион ожил! Огни загорелись, музыка заиграла, ракеты взлетели! Все роботы закричали: «Ура!»",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt and orange robot, golden piece being inserted into control panel, space ride lighting up with stars and planets, excited robots cheering, spectacular light show, Pixar animation style, Disney quality, triumphant activation"
+            },
+            {
+              "number": 10,
+              "title": "Награда",
+              "text": "{name} прокатился на аттракционе — летал среди звёзд и планет! Спарк подарил {ему_ей} золотой значок. Портал открылся, и {name} вернулся домой со светящимся значком в руке.",
+              "image_prompt": "{hair_color} {gender} child in a {shirt_color} t-shirt, riding in a rocket through virtual space with stars, planets, comets, amazed happy expression, orange robot waving goodbye, golden badge shining, Pixar animation style, Disney quality, magical finale"
+            }
+          ]
+        }
+      ],
+      "variables": {
+        "name": "Имя ребёнка (именительный падеж)",
+        "name_acc": "Имя ребёнка (винительный падеж)",
+        "name_dat": "Имя ребёнка (дательный падеж)",
+        "name_gen": "Имя ребёнка (родительный падеж)",
+        "age": "Возраст (цифра)",
+        "gender": "boy / girl",
+        "hair_color": "blonde / brown-haired / red-haired / dark-haired",
+        "shirt_color": "rainbow-striped / blue / red / yellow / green / pink",
+        "он_она": "он / она",
+        "Он_Она": "Он / Она",
+        "его_её": "его / её",
+        "ему_ей": "ему / ей"
+      }
+    }
+  },
+  "space": {
+    "name": "🚀 Космическое приключение",
+    "gender": "universal",
+    "story": {
+      "title": "Потерянная звезда",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} смотрел в телескоп на звёзды. Вдруг одна звезда замигала и начала падать! {name} загадал желание.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, looking through telescope at night sky, one star falling and twinkling, bedroom window, magical moment, Pixar style, Disney quality"
+        },
+        {
+          "number": 2,
+          "text": "Звезда упала прямо во двор! Это была маленькая светящаяся звёздочка. «Помоги мне вернуться домой!» — попросила она.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, in backyard at night, small glowing star character floating nearby, surprised expression, magical glow, Pixar style, Disney quality"
+        },
+        {
+          "number": 3,
+          "text": "Звезда нарисовала в небе портал. {name} взял {его_её} за руку, и они полетели в космос!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, flying through glowing portal into space, holding hands with small star"
+        },
+        {
+          "number": 4,
+          "text": "Они прилетели на космическую станцию. Везде летали роботы-астронавты и мигали разноцветные кнопки.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, floating in futuristic space station, robot astronauts working, colorful control panels, zero gravity, amazed expression, Pixar style, Disney quality"
+        },
+        {
+          "number": 5,
+          "text": "«Где твой дом?» — спросил {name}. Звезда показала на далёкую розовую туманность. «Там! Но путь опасный!»",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt and small star"
+        },
+        {
+          "number": 6,
+          "text": "Они сели в маленькую ракету и полетели. Мимо пролетали метеориты и кометы!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, piloting small rocket ship with star"
+        },
+        {
+          "number": 7,
+          "text": "Вдруг впереди появилась чёрная дыра! Она затягивала всё внутрь. «Держись крепче!» — крикнул {name}.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, gripping rocket controls, black hole ahead pulling objects in, dramatic moment, star character worried, Pixar style, Disney quality"
+        },
+        {
+          "number": 8,
+          "text": "{name} включил турбо-ускорение! Ракета с трудом, но вырвалась из притяжения.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, pressing turbo button, rocket with bright engines escaping black hole, action scene, victorious, Pixar style, Disney quality"
+        },
+        {
+          "number": 9,
+          "text": "Они добрались до розовой туманности! Тысячи звёзд встретили их радостным сиянием.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt and star"
+        },
+        {
+          "number": 10,
+          "text": "Звёзды подарили {name_dat} светящийся осколок. «Спасибо за помощь!» Портал открылся, и {name} вернулся домой со звёздным подарком.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, holding glowing star fragment, surrounded by thankful stars, portal opening, bedroom visible through it, heartwarming goodbye, Pixar style, Disney quality"
+        }
+      ]
+    }
+  },
+  "dinosaurs": {
+    "name": "🦕 Долина динозавров",
+    "gender": "universal",
+    "story": {
+      "title": "Потерянное яйцо",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} играл с игрушечными динозаврами. Вдруг один динозавр ожил! «Помоги найти моё яйцо!» — попросил он.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, playing with toy dinosaurs at home, one small friendly dinosaur coming alive, magical moment, Pixar style, Disney quality"
+        },
+        {
+          "number": 2,
+          "text": "Динозавр открыл портал в прошлое. {name} шагнул внутрь и оказался в настоящей долине динозавров!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, stepping through time portal, prehistoric jungle with volcanoes visible, transition from bedroom to dinosaur world, Pixar style, Disney quality"
+        },
+        {
+          "number": 3,
+          "text": "Кругом росли огромные деревья и папоротники. В небе летали птеродактили!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, standing in prehistoric jungle, giant ferns and trees, pterodactyls flying overhead, amazed expression, Pixar style, Disney quality"
+        },
+        {
+          "number": 4,
+          "text": "«Моё яйцо где-то здесь!» — сказал динозавр. Они пошли искать. По пути встретили доброго диплодока.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, small dinosaur friend, meeting friendly diplodocus, lush prehistoric landscape, warm colors, Pixar style, Disney quality"
+        },
+        {
+          "number": 5,
+          "text": "Диплодок показал путь к пещере. «Там живёт хранитель яиц!» У входа сидел маленький трицератопс.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, approaching cave entrance with small dinosaur, baby triceratops at entrance, prehistoric setting, Pixar style, Disney quality"
+        },
+        {
+          "number": 6,
+          "text": "«Яйцо у меня! Но сначала помоги собрать волшебные ягоды для динозавриков!» — попросил трицератопс.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, talking with baby triceratops, colorful glowing berries on bushes nearby, quest scene, Pixar style, Disney quality"
+        },
+        {
+          "number": 7,
+          "text": "{name} собрал полную корзину ягод. Трицератопс был рад! «Спасибо! Держи яйцо!»",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, holding basket of glowing berries, baby triceratops happy, giving decorated dinosaur egg, Pixar style, Disney quality"
+        },
+        {
+          "number": 8,
+          "text": "Вдруг яйцо затряслось! Из него вылупился маленький динозаврик. Он был таким милым!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, watching egg hatching, tiny cute baby dinosaur emerging, magical moment, everyone excited, Pixar style, Disney quality"
+        },
+        {
+          "number": 9,
+          "text": "Все динозавры устроили праздник! Танцевали, ели ягоды и радовались.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, celebrating with various friendly dinosaurs, baby dinosaur, party in prehistoric jungle, joyful scene, Pixar style, Disney quality"
+        },
+        {
+          "number": 10,
+          "text": "Динозаврик подарил {name_dat} свой зуб на память. Портал открылся, и {name} вернулся домой с динозавровым сувениром!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, holding dinosaur tooth souvenir, waving goodbye to dinosaur friends, portal opening back home, heartwarming, Pixar style, Disney quality"
+        }
+      ]
+    }
+  },
+  "underwater": {
+    "name": "🌊 Подводное царство",
+    "gender": "universal",
+    "story": {
+      "title": "Жемчужина русалки",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} нашёл на пляже волшебную ракушку. Она засветилась и открыла подводный портал!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, on beach finding glowing seashell, portal opening in waves, magical ocean scene, Pixar style"
+        },
+        {
+          "number": 2,
+          "text": "{name} нырнул в портал. {Он_Она} мог дышать под водой! Вокруг плавали разноцветные рыбки.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, swimming underwater, colorful tropical fish, coral reefs, magical underwater world, Pixar style"
+        },
+        {
+          "number": 3,
+          "text": "К {name_dat} подплыла русалочка. «Помоги найти потерянную жемчужину!» — попросила она.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, meeting friendly mermaid underwater, coral kingdom background, friendly greeting, Pixar style"
+        },
+        {
+          "number": 4,
+          "text": "Они поплыли к затонувшему кораблю. Там прятался осьминог-пират! «Жемчужина моя!» — сказал он.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt and mermaid, approaching sunken ship, friendly octopus pirate with hat, underwater adventure, Pixar style"
+        },
+        {
+          "number": 5,
+          "text": "«Найди три морские звёзды — отдам жемчужину!» — предложил осьминог. {name} согласился.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, talking with octopus, quest objective shown, underwater setting, Pixar style"
+        },
+        {
+          "number": 6,
+          "text": "{name} нашёл звёзд на дне: красную, жёлтую и синюю. Они светились волшебным светом!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, collecting three glowing starfish of different colors, ocean floor, magical glow, Pixar style"
+        },
+        {
+          "number": 7,
+          "text": "Осьминог отдал жемчужину. Она была огромная и переливалась всеми цветами радуги!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, receiving large rainbow pearl from octopus, mermaid nearby happy, Pixar style"
+        },
+        {
+          "number": 8,
+          "text": "Русалочка вставила жемчужину в корону. Вся подводная страна засияла!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, mermaid placing pearl in crown, underwater kingdom lighting up, celebration, Pixar style"
+        },
+        {
+          "number": 9,
+          "text": "Морские жители устроили праздник! Дельфины прыгали, киты пели песни.",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, underwater celebration with dolphins jumping, whales, sea creatures dancing, joyful, Pixar style"
+        },
+        {
+          "number": 10,
+          "text": "Русалочка подарила {name_dat} маленькую жемчужину. Портал открылся, и {name} вернулся на пляж с подарком!",
+          "image_prompt": "{hair_color} {gender} child in {shirt_color} t-shirt, holding small pearl, waving goodbye to mermaid, portal back to beach, Pixar style"
+        }
+      ]
+    }
+  },
+  "fairy_land": {
+    "name": "🧚 Страна фей",
+    "gender": "girl",
+    "story": {
+      "title": "Волшебная палочка",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} нашла в саду светящийся цветок. Из него вылетела маленькая фея!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, in garden discovering glowing flower, tiny fairy flying out, magical sparkles, Pixar style"
+        },
+        {
+          "number": 2,
+          "text": "«Я потеряла волшебную палочку!» — сказала фея. «Помоги найти {его_её}!» {name} согласилась.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, talking with small worried fairy, garden setting, magical atmosphere, Pixar style"
+        },
+        {
+          "number": 3,
+          "text": "Фея открыла портал в Страну фей. Там росли цветы-великаны и летали бабочки размером с птиц!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, entering magical fairy land, giant flowers, huge butterflies, enchanted forest, Pixar style"
+        },
+        {
+          "number": 4,
+          "text": "Они встретили короля эльфов. «Палочку украл озорной гном!» — сказал он.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress and fairy, meeting elf king on mushroom throne, magical fairy forest, Pixar style"
+        },
+        {
+          "number": 5,
+          "text": "{name} пошла к гному. Он прятался в дупле дерева и хихикал.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, approaching tree hollow, mischievous gnome peeking out, fairy nearby, Pixar style"
+        },
+        {
+          "number": 6,
+          "text": "«Отгадай три загадки — верну палочку!» — сказал гном. {name} думала и отгадала все загадки!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, solving riddles with gnome, fairy watching, magical effects, smart and determined, Pixar style"
+        },
+        {
+          "number": 7,
+          "text": "Гном отдал палочку. Она засияла ярким светом! Вся страна наполнилась магией.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, holding glowing magic wand returned by gnome, magical light spreading, Pixar style"
+        },
+        {
+          "number": 8,
+          "text": "Фея взмахнула палочкой. Появились волшебные качели из радуги!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, fairy waving wand, rainbow swing appearing, magical creation, joyful, Pixar style"
+        },
+        {
+          "number": 9,
+          "text": "{name} каталась на радужных качелях. Это было лучшее приключение!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, swinging on rainbow swing in sky, fairy and other magical creatures watching, pure joy, Pixar style"
+        },
+        {
+          "number": 10,
+          "text": "Фея подарила {name_dat} крылышки бабочки. Портал открылся, и {name} вернулась домой с волшебным подарком!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, holding butterfly wings, waving goodbye to fairy friends, portal home, magical farewell, Pixar style"
+        }
+      ]
+    }
+  },
+  "princess": {
+    "name": "👑 Королевство принцесс",
+    "gender": "girl",
+    "story": {
+      "title": "Королевский бал",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} нашла в бабушкином сундуке золотое приглашение на королевский бал!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, discovering golden invitation in old trunk, magical sparkles, excited, Pixar style"
+        },
+        {
+          "number": 2,
+          "text": "Приглашение засветилось и открыло портал! {name} попала в настоящий замок!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, stepping through golden portal into magnificent castle, grand entrance, Pixar style"
+        },
+        {
+          "number": 3,
+          "text": "В замке готовились к балу. Но принцесса была грустной. «Пропала моя корона!» — сказала она.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, meeting sad princess in castle, ballroom being decorated in background, Pixar style"
+        },
+        {
+          "number": 4,
+          "text": "{name} решила помочь! Королевский советник дал три подсказки где искать.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, receiving clues from wise royal advisor, castle interior, quest beginning, Pixar style"
+        },
+        {
+          "number": 5,
+          "text": "Первая подсказка вела в королевский сад. Там {name} нашла волшебное зеркало!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, in royal garden finding magic mirror among roses, beautiful castle garden, Pixar style"
+        },
+        {
+          "number": 6,
+          "text": "Зеркало показало, что корона в башне дракона! Но дракон оказался добрым.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, meeting friendly dragon in tower, dragon showing crown, castle tower, Pixar style"
+        },
+        {
+          "number": 7,
+          "text": "«Корона застряла на моём хвосте! Помоги снять!» — попросил дракон. {name} аккуратно освободила корону.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, carefully removing crown from dragon's tail, teamwork, castle tower, Pixar style"
+        },
+        {
+          "number": 8,
+          "text": "{name} вернула корону принцессе. Та была так рада! «Спасибо! Оставайся на балу!»",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, giving crown to happy princess, throne room, joyful reunion, Pixar style"
+        },
+        {
+          "number": 9,
+          "text": "Принцесса подарила {name_dat} красивое платье. Бал был волшебным — музыка, танцы, угощения!",
+          "image_prompt": "{hair_color} girl child in beautiful ball gown, dancing at royal ball, castle ballroom, magical celebration, Pixar style"
+        },
+        {
+          "number": 10,
+          "text": "Принцесса подарила {name_dat} маленькую тиару. Портал открылся, и {name} вернулась домой — теперь настоящая принцесса!",
+          "image_prompt": "{hair_color} girl character wearing small tiara, waving goodbye to princess and castle, portal home, magical ending, Pixar style"
+        }
+      ]
+    }
+  },
+  "unicorns": {
+    "name": "🦄 Единороги и радуга",
+    "gender": "girl",
+    "story": {
+      "title": "Радужный мост",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} рисовала единорогов. Вдруг один единорог ожил и выпрыгнул из рисунка!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, drawing unicorns, one magical unicorn jumping out of paper, rainbow sparkles, Pixar style"
+        },
+        {
+          "number": 2,
+          "text": "«Радужный мост сломался! Помоги починить!» — попросил единорог. Он открыл портал.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, talking with small unicorn, rainbow portal opening, magical moment, Pixar style"
+        },
+        {
+          "number": 3,
+          "text": "{name} попала в волшебную страну! Облака были розовыми, а трава сверкала как драгоценные камни.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, arriving in magical land with pink clouds, sparkling grass, rainbow in distance, Pixar style"
+        },
+        {
+          "number": 4,
+          "text": "Впереди был сломанный радужный мост. «Нужно найти семь цветных кристаллов!» — сказал единорог.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress and unicorn, looking at broken rainbow bridge, magical landscape, quest objective, Pixar style"
+        },
+        {
+          "number": 5,
+          "text": "{name} нашла красный кристалл в пещере рубинов, оранжевый — на дереве апельсинов!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, collecting colorful crystals, ruby cave and orange tree, magical gathering, Pixar style"
+        },
+        {
+          "number": 6,
+          "text": "Жёлтый кристалл подарили пчёлки, зелёный — лесные эльфы, голубой нашёлся в озере!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, receiving crystals from bees, elves, finding in lake, magical helpers, Pixar style"
+        },
+        {
+          "number": 7,
+          "text": "Синий кристалл был у облачного дракона, а фиолетовый — в цветочном замке!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, collecting last crystals from cloud dragon and flower castle, adventure montage, Pixar style"
+        },
+        {
+          "number": 8,
+          "text": "У {name_gen} были все семь кристаллов! Единорог коснулся их рогом, и они засияли.",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, holding seven glowing crystals, unicorn touching them with horn, magical activation, Pixar style"
+        },
+        {
+          "number": 9,
+          "text": "Кристаллы взлетели и построили новый радужный мост! Все единороги радовались!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, watching crystals forming rainbow bridge, many unicorns celebrating, magical creation, Pixar style"
+        },
+        {
+          "number": 10,
+          "text": "Единорог подарил {name_dat} радужное пёрышко. Портал открылся, и {name} вернулась домой с волшебным даром!",
+          "image_prompt": "{hair_color} girl child in {shirt_color} dress, holding rainbow feather, waving goodbye to unicorns, portal home, magical farewell, Pixar style"
+        }
+      ]
+    }
+  },
+  "knight": {
+    "name": "🏰 Рыцарь и дракон",
+    "gender": "boy",
+    "story": {
+      "title": "Спасение королевства",
+      "scenes": [
+        {
+          "number": 1,
+          "text": "{name} играл с деревянным мечом. Вдруг меч засветился и превратился в настоящий!",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, wooden sword transforming into glowing real sword, bedroom, magical transformation, Pixar style"
+        },
+        {
+          "number": 2,
+          "text": "Меч открыл портал в средневековое королевство! {name} попал прямо в рыцарский замок.",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt with sword, stepping through portal into medieval castle courtyard, knights training, Pixar style"
+        },
+        {
+          "number": 3,
+          "text": "Король был в беде! «Дракон украл королевский флаг! Без него королевство в опасности!»",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, meeting worried king in throne room, empty flagpole visible through window, Pixar style"
+        },
+        {
+          "number": 4,
+          "text": "{name} вызвался помочь! Старый рыцарь дал ему щит и показал путь к драконьей горе.",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, receiving shield from old knight, dragon mountain visible in distance, Pixar style"
+        },
+        {
+          "number": 5,
+          "text": "По пути {name} встретил волшебника. «Возьми зелье храбрости!» — подарил он {ему_ей} флакон.",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt with sword and shield, meeting wise wizard giving potion, forest path, Pixar style"
+        },
+        {
+          "number": 6,
+          "text": "{name} добрался до пещеры дракона. Огромный дракон спал на куче золота и флаге!",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, entering cave, large sleeping dragon on treasure with flag, dramatic scene, Pixar style"
+        },
+        {
+          "number": 7,
+          "text": "Дракон проснулся! Но {name} выпил зелье храбрости. «Отдай флаг!» — смело сказал он.",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, bravely facing dragon with sword and shield, cave interior, heroic stance, Pixar style"
+        },
+        {
+          "number": 8,
+          "text": "Дракон оказался не злым! «Мне просто скучно одному. Давай дружить?» {name} согласился!",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, shaking hands with friendly dragon, both smiling, friendship moment, Pixar style"
+        },
+        {
+          "number": 9,
+          "text": "Дракон вернул флаг и полетел в замок! Король был рад и устроил пир в честь {name_gen}!",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, riding on dragon's back toward castle, flag waving, triumphant return, Pixar style"
+        },
+        {
+          "number": 10,
+          "text": "Король подарил {name_dat} рыцарский щит. Портал открылся, и {name} вернулся домой — настоящий рыцарь!",
+          "image_prompt": "{hair_color} boy child in {shirt_color} t-shirt, holding knight shield and sword, waving goodbye to king and dragon, portal home, heroic ending, Pixar style"
+        }
+      ]
+    }
+  }
+}
