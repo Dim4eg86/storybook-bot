@@ -19,7 +19,7 @@ from payment import create_payment, is_payment_successful
 from database import db
 
 # НАСТРОЙКИ
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8558194892:AAFC_hreFvCX3PoqOYekUCkUhJFakDHqY9E")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # YooKassa (из переменных окружения)
 YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
