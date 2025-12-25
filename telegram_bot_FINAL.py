@@ -35,8 +35,6 @@ BOOK_PRICE = 449  # рублей
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
 
-print(f"💳 Оплата: {'✅ ВКЛЮЧЕНА' if PAYMENT_ENABLED else '⚠️ ВЫКЛЮЧЕНА (тестовый режим)'}")
-
 
 def decline_name_accusative(name, gender):
     """Склоняет имя в винительный падеж"""
