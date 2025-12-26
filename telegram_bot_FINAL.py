@@ -238,8 +238,120 @@ async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
+async def admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ нажал кнопку 'Свой ответ' - включаем режим ответа"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Проверка что это админ
+    if query.from_user.id != ADMIN_ID:
+        return
+    
+    # Извлекаем user_id из callback_data
+    user_id = int(query.data.split('_')[2])
+    
+    # Сохраняем в контекст что админ отвечает этому пользователю
+    context.user_data['admin_replying_to'] = user_id
+    
+    await query.edit_message_text(
+        text=query.message.text + "\n\n<b>✍️ Напишите ваш ответ:</b>",
+        parse_mode='HTML'
+    )
+
+
+async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем текст ответа от админа"""
+    
+    # Проверяем что это админ и он в режиме ответа
+    if update.effective_user.id != ADMIN_ID:
+        return
+    
+    user_id = context.user_data.get('admin_replying_to')
+    if not user_id:
+        return
+    
+    reply_text = update.message.text
+    
+    # Отключаем режим ответа
+    context.user_data['admin_replying_to'] = None
+    
+    # Экранируем HTML
+    safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    
+    try:
+        # Отправляем ответ пользователю
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{safe_reply}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
+            ),
+            parse_mode='HTML'
+        )
+        
+        # Подтверждение админу
+        await update.message.reply_text(f"✅ Ответ отправлен пользователю {user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
+
+
+async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем быстрые ответы (кнопки)"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Проверка что это админ
+    if query.from_user.id != ADMIN_ID:
+        return
+    
+    # Извлекаем тип ответа и user_id
+    parts = query.data.split('_')
+    reply_type = parts[1]
+    user_id = int(parts[2])
+    
+    # Готовые ответы
+    quick_replies = {
+        'paid': '✅ Ваш платёж получен! Книга отправляется сейчас.',
+        'wait': '⏳ Ваша книга генерируется. Это займёт 3-5 минут. Пожалуйста, подождите!',
+        'error': '❌ Произошла ошибка. Мы уже работаем над решением. Напишите мне через несколько минут.',
+        'howto': '👌 Создание сказки простое: нажмите /start → ⭐ Создать сказку → следуйте инструкциям. Цена 449₽.',
+        'balance': '💰 Проверяю ваш платёж... Один момент!',
+        'quality': '🎨 Все иллюстрации создаются с помощью AI Disney/Pixar качества. Гарантируем высокое качество!'
+    }
+    
+    reply_text = quick_replies.get(reply_type, 'Спасибо за обращение!')
+    
+    try:
+        # Отправляем ответ пользователю
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{reply_text}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
+            ),
+            parse_mode='HTML'
+        )
+        
+        # Обновляем сообщение админу
+        await query.edit_message_text(
+            text=query.message.text + f"\n\n<b>✅ Отправлен быстрый ответ: {reply_type}</b>",
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        await query.message.reply_text(f"❌ Ошибка отправки: {e}")
+
+
 async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатываем сообщение в режиме поддержки"""
+    
+    # Если это админ в режиме ответа - обрабатываем отдельно
+    if update.effective_user.id == ADMIN_ID and context.user_data.get('admin_replying_to'):
+        await handle_admin_reply(update, context)
+        return
     
     # Проверяем режим поддержки
     support_mode = context.user_data.get('support_mode', False)
@@ -271,20 +383,34 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
         safe_message = user_message.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
         admin_text = (
-            f"📩 <b>НОВОЕ СООБЩЕНИЕ В ПОДДЕРЖКУ</b>\n\n"
-            f"👤 От: {safe_name}\n"
-            f"🆔 ID: <code>{user.id}</code>\n"
-            f"👤 Username: @{safe_username}\n\n"
-            f"💬 Сообщение:\n{safe_message}\n\n"
-            f"<i>Чтобы ответить, используйте:</i>\n"
-            f"<code>/reply {user.id} текст ответа</code>"
+            f"📩 <b>Новое обращение в поддержку</b>\n\n"
+            f"👤 User ID: {user.id}\n"
+            f"👤 Username: @{safe_username}\n"
+            f"💬 Сообщение:\n{safe_message}"
         )
+        
+        # Кнопки для ответа
+        keyboard = [
+            [InlineKeyboardButton("✍️ Свой ответ", callback_data=f"admin_reply_{user.id}")],
+            [
+                InlineKeyboardButton("✅ Оплачено", callback_data=f"quick_paid_{user.id}"),
+                InlineKeyboardButton("⏳ Ждите", callback_data=f"quick_wait_{user.id}")
+            ],
+            [
+                InlineKeyboardButton("❌ Ошибка", callback_data=f"quick_error_{user.id}"),
+                InlineKeyboardButton("👌 Как работает?", callback_data=f"quick_howto_{user.id}")
+            ],
+            [InlineKeyboardButton("💰 Баланс", callback_data=f"quick_balance_{user.id}")],
+            [InlineKeyboardButton("🎨 Качество", callback_data=f"quick_quality_{user.id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=admin_text,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=reply_markup
             )
             print(f"✅ Сообщение отправлено админу {ADMIN_ID}")
         except Exception as e:
@@ -913,6 +1039,10 @@ def main():
     application.add_handler(CallbackQueryHandler(how_it_works_callback, pattern='^how_it_works$'))
     application.add_handler(CallbackQueryHandler(support_callback, pattern='^support$'))
     application.add_handler(CallbackQueryHandler(cancel_support_callback, pattern='^cancel_support$'))
+    
+    # Handlers для кнопок админа в поддержке
+    application.add_handler(CallbackQueryHandler(admin_reply_callback, pattern='^admin_reply_'))
+    application.add_handler(CallbackQueryHandler(quick_reply_callback, pattern='^quick_'))
     
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
