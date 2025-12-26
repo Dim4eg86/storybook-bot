@@ -68,7 +68,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")],
         [InlineKeyboardButton("📚 Посмотреть примеры", callback_data="show_examples")],
-        [InlineKeyboardButton("❓ Как это работает?", callback_data="how_it_works")]
+        [InlineKeyboardButton("❓ Как это работает?", callback_data="how_it_works")],
+        [InlineKeyboardButton("📞 Поддержка", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -194,6 +195,128 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
         text="Готовы создать сказку?",
         reply_markup=reply_markup
     )
+
+
+async def support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запускаем режим поддержки - пользователь пишет прямо в бота"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['support_mode'] = True
+    
+    keyboard = [[InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "📞 *Служба поддержки*\n\n"
+            "Напишите ваш вопрос или проблему, и я передам его администратору.\n\n"
+            "*Мы отвечаем:*\n"
+            "• По вопросам оплаты — моментально\n"
+            "• Технические вопросы — в течение часа\n"
+            "• Общие вопросы — в течение 2-3 часов\n\n"
+            "✍️ Напишите сообщение:"
+        ),
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+
+async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяем режим поддержки"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['support_mode'] = False
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="✅ Отменено. Используйте /start для возврата в главное меню."
+    )
+
+
+async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем сообщение в режиме поддержки"""
+    
+    # Проверяем режим поддержки
+    if not context.user_data.get('support_mode'):
+        return
+    
+    user = update.effective_user
+    user_message = update.message.text
+    
+    # Отключаем режим поддержки
+    context.user_data['support_mode'] = False
+    
+    # Отправляем подтверждение пользователю
+    await update.message.reply_text(
+        "✅ Ваше сообщение отправлено в поддержку!\n\n"
+        "Мы ответим вам в ближайшее время прямо здесь, в боте.\n\n"
+        "Используйте /start для возврата в главное меню."
+    )
+    
+    # Пересылаем админу
+    if ADMIN_ID:
+        admin_text = (
+            f"📩 *НОВОЕ СООБЩЕНИЕ В ПОДДЕРЖКУ*\n\n"
+            f"👤 От: {user.first_name or 'Без имени'}\n"
+            f"🆔 ID: `{user.id}`\n"
+            f"👤 Username: @{user.username or 'нет'}\n\n"
+            f"💬 Сообщение:\n{user_message}\n\n"
+            f"_Чтобы ответить, используйте:_\n"
+            f"`/reply {user.id} ваш_ответ`"
+        )
+        
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=admin_text,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            print(f"❌ Ошибка отправки админу: {e}")
+
+
+async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для ответа пользователю: /reply USER_ID текст"""
+    
+    # Проверка что это админ
+    if update.effective_user.id != ADMIN_ID:
+        return
+    
+    # Проверяем аргументы
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Использование: /reply USER_ID текст ответа\n\n"
+            "Пример: /reply 123456789 Здравствуйте! Ваш вопрос решён."
+        )
+        return
+    
+    try:
+        user_id = int(context.args[0])
+        reply_text = ' '.join(context.args[1:])
+        
+        # Отправляем ответ пользователю
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"📞 *Ответ от поддержки:*\n\n"
+                f"{reply_text}\n\n"
+                f"_Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка_"
+            ),
+            parse_mode='Markdown'
+        )
+        
+        # Подтверждение админу
+        await update.message.reply_text(
+            f"✅ Ответ отправлен пользователю {user_id}"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный ID пользователя")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
 
 
 async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -766,13 +889,19 @@ def main():
     
     application.add_handler(conv_handler)
     
-    # Handlers для примеров и инструкции (вне conversation)
+    # Handlers для примеров, инструкции и поддержки (вне conversation)
     application.add_handler(CallbackQueryHandler(show_examples_callback, pattern='^show_examples$'))
     application.add_handler(CallbackQueryHandler(how_it_works_callback, pattern='^how_it_works$'))
+    application.add_handler(CallbackQueryHandler(support_callback, pattern='^support$'))
+    application.add_handler(CallbackQueryHandler(cancel_support_callback, pattern='^cancel_support$'))
+    
+    # Handler для сообщений в поддержку (вне conversation)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message))
     
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
     application.add_handler(CommandHandler('stats', stats_command))
+    application.add_handler(CommandHandler('reply', reply_command))  # Для админа
     
     print("✅ Бот с YooKassa и БД запущен!")
     
