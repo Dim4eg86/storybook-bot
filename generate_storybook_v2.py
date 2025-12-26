@@ -315,7 +315,7 @@ def create_storybook_v2(
             prompt = prompt.replace(f"{{{var}}}", value)
         
         # Добавляем Disney/Pixar стиль для профессионального качества
-        prompt += ", Disney Pixar animation style, 3D rendered, professional children's book illustration, vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, high quality, masterpiece"
+        prompt += ", Disney Pixar animation style, 3D rendered, professional children's book illustration, vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, anatomically correct hands, five fingers per hand, proper hand anatomy, high quality, masterpiece"
         
         # Генерируем иллюстрацию
         image_filename = f"scene_{scene_num:02d}.png"
