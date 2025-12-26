@@ -203,6 +203,7 @@ async def support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     context.user_data['support_mode'] = True
+    print(f"📞 Включен режим поддержки для пользователя {query.from_user.id}")
     
     keyboard = [[InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -229,6 +230,7 @@ async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     
     context.user_data['support_mode'] = False
+    print(f"❌ Отменен режим поддержки для пользователя {query.from_user.id}")
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
@@ -240,11 +242,16 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     """Обрабатываем сообщение в режиме поддержки"""
     
     # Проверяем режим поддержки
-    if not context.user_data.get('support_mode'):
+    support_mode = context.user_data.get('support_mode', False)
+    print(f"📝 Получено сообщение. Support mode: {support_mode}")
+    
+    if not support_mode:
         return
     
     user = update.effective_user
     user_message = update.message.text
+    
+    print(f"📩 Обрабатываем сообщение в поддержку от {user.id}: {user_message}")
     
     # Отключаем режим поддержки
     context.user_data['support_mode'] = False
@@ -274,6 +281,7 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
                 text=admin_text,
                 parse_mode='Markdown'
             )
+            print(f"✅ Сообщение отправлено админу {ADMIN_ID}")
         except Exception as e:
             print(f"❌ Ошибка отправки админу: {e}")
 
@@ -859,6 +867,9 @@ def main():
     
     application = Application.builder().token(BOT_TOKEN).request(request).build()
     
+    # Handler для сообщений в поддержку (ПЕРВЫМ! group=-1)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message), group=-1)
+    
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler('start', start),
@@ -894,9 +905,6 @@ def main():
     application.add_handler(CallbackQueryHandler(how_it_works_callback, pattern='^how_it_works$'))
     application.add_handler(CallbackQueryHandler(support_callback, pattern='^support$'))
     application.add_handler(CallbackQueryHandler(cancel_support_callback, pattern='^cancel_support$'))
-    
-    # Handler для сообщений в поддержку (вне conversation)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message))
     
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
