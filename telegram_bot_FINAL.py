@@ -31,7 +31,8 @@ PAYMENT_ENABLED = bool(YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
 # Цена
-BOOK_PRICE = 449  # рублей
+BOOK_PRICE = 449  # рублей для пользователей
+TEST_PRICE = 10   # рублей для админа (тестирование)
 
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
@@ -702,8 +703,12 @@ async def process_payment(update, context):
         return ConversationHandler.END
     
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
+    # Определяем цену: для админа тестовая, для остальных обычная
+    user_id = update.effective_user.id
+    price = TEST_PRICE if user_id == ADMIN_ID else BOOK_PRICE
+    
     payment_data = create_payment(
-        amount=BOOK_PRICE,
+        amount=price,
         description=f"Персональная сказка про {name}",
         return_url=f"https://t.me/{BOT_USERNAME}",
         customer_email="noreply@storybook.ru"  # Фиктивный email для чека
@@ -723,25 +728,32 @@ async def process_payment(update, context):
         payment_id=payment_data['id'],
         order_id=order_id,
         user_id=user_id,
-        amount=BOOK_PRICE,
+        amount=price,
         payment_url=payment_data['confirmation_url']
     )
     
     context.user_data['payment_id'] = payment_data['id']
+    context.user_data['payment_amount'] = price  # Сохраняем цену для статистики
     
     # ОТПРАВЛЯЕМ КНОПКУ ОПЛАТЫ
     keyboard = [[InlineKeyboardButton(
-        f"💳 Оплатить {BOOK_PRICE}₽", 
+        f"💳 Оплатить {price}₽", 
         url=payment_data['confirmation_url']
     )]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     
+    # Текст для админа с пометкой о тестовой цене
+    if user_id == ADMIN_ID:
+        price_text = f"💰 *Стоимость: {price}₽* 🧪 _(тестовая цена для админа)_\n\n"
+    else:
+        price_text = f"💰 *Стоимость: {price}₽*\n\n"
+    
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
-            f"💰 *Стоимость: {BOOK_PRICE}₽*\n\n"
+            price_text +
             f"📖 Сказка про {name}\n"
             f"🎨 10 страниц с иллюстрациями Disney/Pixar качества\n"
             f"📄 PDF файл для печати\n\n"
@@ -796,7 +808,7 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         # Обновляем статусы в БД
         db.update_payment_status(payment_id, 'succeeded')
         db.update_order_status(user_data['order_id'], 'paid')
-        db.update_daily_stats(revenue=BOOK_PRICE)
+        db.update_daily_stats(revenue=user_data.get('payment_amount', BOOK_PRICE))
         
         # Останавливаем проверку
         job.schedule_removal()
@@ -921,7 +933,7 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
         if order_id:
             db.update_payment_status(payment_id, 'succeeded')
             db.update_order_status(order_id, 'paid')
-            db.update_daily_stats(revenue=BOOK_PRICE)
+            db.update_daily_stats(revenue=context.user_data.get('payment_amount', BOOK_PRICE))
         
         await start_generation(update, context)
     else:
