@@ -272,7 +272,7 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
             f"👤 Username: @{user.username or 'нет'}\n\n"
             f"💬 Сообщение:\n{user_message}\n\n"
             f"_Чтобы ответить, используйте:_\n"
-            f"`/reply {user.id} ваш_ответ`"
+            f"`/reply {user.id} текст ответа`"
         )
         
         try:
