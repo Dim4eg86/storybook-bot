@@ -20,6 +20,7 @@ from database import db
 
 # НАСТРОЙКИ
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "Sefirum_storybook_bot")  # Username бота без @
 
 # YooKassa (из переменных окружения)
 YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
@@ -704,6 +705,7 @@ async def process_payment(update, context):
     payment_data = create_payment(
         amount=BOOK_PRICE,
         description=f"Персональная сказка про {name}",
+        return_url=f"https://t.me/{BOT_USERNAME}",
         customer_email="noreply@storybook.ru"  # Фиктивный email для чека
     )
     
