@@ -265,21 +265,26 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     
     # Пересылаем админу
     if ADMIN_ID:
+        # Экранируем HTML символы
+        safe_name = (user.first_name or 'Без имени').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        safe_username = (user.username or 'нет').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        safe_message = user_message.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
         admin_text = (
-            f"📩 *НОВОЕ СООБЩЕНИЕ В ПОДДЕРЖКУ*\n\n"
-            f"👤 От: {user.first_name or 'Без имени'}\n"
-            f"🆔 ID: `{user.id}`\n"
-            f"👤 Username: @{user.username or 'нет'}\n\n"
-            f"💬 Сообщение:\n{user_message}\n\n"
-            f"_Чтобы ответить, используйте:_\n"
-            f"`/reply {user.id} текст ответа`"
+            f"📩 <b>НОВОЕ СООБЩЕНИЕ В ПОДДЕРЖКУ</b>\n\n"
+            f"👤 От: {safe_name}\n"
+            f"🆔 ID: <code>{user.id}</code>\n"
+            f"👤 Username: @{safe_username}\n\n"
+            f"💬 Сообщение:\n{safe_message}\n\n"
+            f"<i>Чтобы ответить, используйте:</i>\n"
+            f"<code>/reply {user.id} текст ответа</code>"
         )
         
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=admin_text,
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             print(f"✅ Сообщение отправлено админу {ADMIN_ID}")
         except Exception as e:
@@ -305,15 +310,18 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = int(context.args[0])
         reply_text = ' '.join(context.args[1:])
         
+        # Экранируем HTML символы
+        safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
         # Отправляем ответ пользователю
         await context.bot.send_message(
             chat_id=user_id,
             text=(
-                f"📞 *Ответ от поддержки:*\n\n"
-                f"{reply_text}\n\n"
-                f"_Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка_"
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{safe_reply}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
             ),
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         # Подтверждение админу
