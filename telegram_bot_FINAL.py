@@ -713,12 +713,16 @@ def main():
     
     # Получаем настройки для webhook
     PORT = int(os.environ.get('PORT', '8080'))
-    WEBHOOK_URL = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
+    USE_WEBHOOK = os.environ.get('USE_WEBHOOK', 'false').lower() == 'true'
+    RAILWAY_DOMAIN = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
     
+    WEBHOOK_URL = ""
+    if USE_WEBHOOK and RAILWAY_DOMAIN:
+        WEBHOOK_URL = f"https://{RAILWAY_DOMAIN}"
+    
+    print(f"🌐 Webhook режим: {'ВКЛЮЧЕН' if USE_WEBHOOK else 'ВЫКЛЮЧЕН'}")
     if WEBHOOK_URL:
-        WEBHOOK_URL = f"https://{WEBHOOK_URL}"
-    
-    print(f"🌐 Webhook URL: {WEBHOOK_URL if WEBHOOK_URL else 'НЕ УСТАНОВЛЕН (используется polling)'}")
+        print(f"🔗 Webhook URL: {WEBHOOK_URL}")
     print(f"🔌 PORT: {PORT}")
     
     # Увеличиваем таймауты
