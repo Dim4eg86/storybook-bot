@@ -438,7 +438,8 @@ async def process_payment(update, context):
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
     payment_data = create_payment(
         amount=BOOK_PRICE,
-        description=f"Персональная сказка про {name}"
+        description=f"Персональная сказка про {name}",
+        customer_email="noreply@storybook.ru"  # Фиктивный email для чека
     )
     
     if not payment_data:
