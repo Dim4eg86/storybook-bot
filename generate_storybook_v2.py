@@ -140,7 +140,7 @@ def analyze_photo(photo_path):
     return analysis
 
 def generate_illustration(prompt, output_path):
-    """Генерирует иллюстрацию через SDXL"""
+    """Генерирует иллюстрацию через Flux Pro"""
     print(f"   🎨 Генерирую иллюстрацию...")
     
     import requests
@@ -148,17 +148,17 @@ def generate_illustration(prompt, output_path):
     from PIL import Image
     
     try:
-        # Используем простой run() метод для SDXL
+        # Используем Flux Pro для максимального качества Disney/Pixar
         output = replicate.run(
-            "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+            "black-forest-labs/flux-1.1-pro",
             input={
                 "prompt": prompt,
                 "width": 768,
                 "height": 1344,
                 "num_outputs": 1,
-                "scheduler": "K_EULER",
-                "num_inference_steps": 30,
-                "guidance_scale": 7.5
+                "output_format": "png",
+                "output_quality": 100,
+                "safety_tolerance": 5  # Максимальная толерантность для детских персонажей
             }
         )
         
@@ -314,14 +314,14 @@ def create_storybook_v2(
         for var, value in vars_map.items():
             prompt = prompt.replace(f"{{{var}}}", value)
         
-        # Добавляем стиль для качества
-        prompt += ", high quality, detailed, professional children's book illustration, vibrant colors, Pixar animation style"
+        # Добавляем Disney/Pixar стиль для профессионального качества
+        prompt += ", Disney Pixar animation style, 3D rendered, professional children's book illustration, vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, high quality, masterpiece"
         
         # Генерируем иллюстрацию
         image_filename = f"scene_{scene_num:02d}.png"
         image_path = os.path.join(output_dir, image_filename)
         
-        # SDXL не блокирует детские изображения!
+        # Flux Pro отлично работает с детскими персонажами!
         generate_illustration(prompt, image_path)
         
         scenes_data.append({
@@ -375,9 +375,11 @@ def create_storybook_v2(
     print(f"📁 Папка: {output_dir}/")
     print(f"📄 PDF: {pdf_path}")
     print()
-    print(f"💰 Себестоимость: 16₽ (SDXL)")
+    print(f"💰 Себестоимость: ~151₽ (Flux Pro + Claude)")
+    print(f"   - Flux Pro: ~120₽ (10 иллюстраций)")
+    print(f"   - Claude Sonnet: ~31₽ (текст + анализ)")
     print(f"💵 Цена продажи: 449₽")
-    print(f"💸 Прибыль: 420₽")
+    print(f"💸 Чистая прибыль: ~298₽")
     print()
     
     return pdf_path
