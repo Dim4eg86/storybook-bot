@@ -711,7 +711,17 @@ def main():
     print("🤖 Запускаю Telegram бота...")
     print(f"💳 Оплата: {'✅ ВКЛЮЧЕНА' if PAYMENT_ENABLED else '⚠️ ВЫКЛЮЧЕНА'}")
     
-    # Увеличиваем таймауты для медленного интернета
+    # Получаем настройки для webhook
+    PORT = int(os.environ.get('PORT', '8080'))
+    WEBHOOK_URL = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
+    
+    if WEBHOOK_URL:
+        WEBHOOK_URL = f"https://{WEBHOOK_URL}"
+    
+    print(f"🌐 Webhook URL: {WEBHOOK_URL if WEBHOOK_URL else 'НЕ УСТАНОВЛЕН (используется polling)'}")
+    print(f"🔌 PORT: {PORT}")
+    
+    # Увеличиваем таймауты
     from telegram.request import HTTPXRequest
     request = HTTPXRequest(
         connect_timeout=30.0,
@@ -760,7 +770,19 @@ def main():
     application.add_handler(CommandHandler('stats', stats_command))
     
     print("✅ Бот с YooKassa и БД запущен!")
-    application.run_polling()
+    
+    # WEBHOOK режим (устраняет конфликты!)
+    if WEBHOOK_URL:
+        print("🔗 Запуск в WEBHOOK режиме (конфликтов НЕ БУДЕТ!)")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path="",
+            webhook_url=WEBHOOK_URL
+        )
+    else:
+        print("📡 Запуск в POLLING режиме")
+        application.run_polling()
 
 
 if __name__ == '__main__':
