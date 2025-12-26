@@ -13,21 +13,22 @@ from reportlab.pdfbase.ttfonts import TTFont
 import textwrap
 import os
 
-# Регистрируем DejaVu Sans - округлый шрифт с кириллицей
+# Регистрируем шрифт с поддержкой кириллицы
 fonts_registered = False
 font_regular = 'Helvetica'
 font_bold = 'Helvetica-Bold'
 
-print("🔤 Загружаю шрифт DejaVu Sans (с поддержкой кириллицы)...")
+print("🔤 Загружаю шрифт с поддержкой кириллицы...")
 
 # Пути к шрифтам (в порядке приоритета)
 FONT_PATHS = [
-    # Linux Railway (DejaVu Sans предустановлен!)
+    # Liberation Sans - ТОЧНО есть на Railway!
+    ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+     '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
+    # DejaVu Sans (запасной)
     ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
-    # Windows (для локальной разработки)
-    ('C:/Windows/Fonts/DejaVuSans.ttf', 'C:/Windows/Fonts/DejaVuSans-Bold.ttf'),
-    # Запасной - Arial
+    # Windows Arial (для локальной разработки)
     ('C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf'),
 ]
 
@@ -55,8 +56,9 @@ for regular_path, bold_path in FONT_PATHS:
         continue
 
 if not fonts_registered:
-    print("❌ Шрифт не найден! Используется Helvetica")
-    print("❌ Текст может отображаться неправильно!")
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Шрифты с кириллицей не найдены!")
+    print("❌ Используется Helvetica - текст будет КВАДРАТАМИ!")
+    print("❌ Свяжитесь с разработчиком!")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
