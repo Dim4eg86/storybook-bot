@@ -13,27 +13,50 @@ from reportlab.pdfbase.ttfonts import TTFont
 import textwrap
 import os
 
-# Регистрируем детский округлый шрифт
+# Регистрируем DejaVu Sans - округлый шрифт с кириллицей
 fonts_registered = False
-try:
-    # Попытка загрузить Comic Sans MS или другой детский шрифт
-    # Проверяем разные возможные пути (Windows, Linux, Railway)
-    import platform
-    system = platform.system()
-    
-    if system == "Windows":
-        pdfmetrics.registerFont(TTFont('MyFont', 'C:/Windows/Fonts/comic.ttf'))
-        pdfmetrics.registerFont(TTFont('MyFontBold', 'C:/Windows/Fonts/comicbd.ttf'))
-    else:
-        # Linux/Railway - используем DejaVu Sans (предустановлен)
-        pdfmetrics.registerFont(TTFont('MyFont', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-        pdfmetrics.registerFont(TTFont('MyFontBold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
-    
-    fonts_registered = True
-    print(f"✅ Загружен шрифт для {system}")
-except Exception as e:
-    print(f"⚠️ Ошибка загрузки шрифта: {e}")
-    print("⚠️ Используется Helvetica (запасной шрифт)")
+font_regular = 'Helvetica'
+font_bold = 'Helvetica-Bold'
+
+print("🔤 Загружаю шрифт DejaVu Sans (с поддержкой кириллицы)...")
+
+# Пути к шрифтам (в порядке приоритета)
+FONT_PATHS = [
+    # Linux Railway (DejaVu Sans предустановлен!)
+    ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
+     '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+    # Windows (для локальной разработки)
+    ('C:/Windows/Fonts/DejaVuSans.ttf', 'C:/Windows/Fonts/DejaVuSans-Bold.ttf'),
+    # Запасной - Arial
+    ('C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf'),
+]
+
+for regular_path, bold_path in FONT_PATHS:
+    try:
+        if os.path.exists(regular_path) and os.path.exists(bold_path):
+            # Регистрируем шрифты
+            pdfmetrics.registerFont(TTFont('BookFont', regular_path))
+            pdfmetrics.registerFont(TTFont('BookFont-Bold', bold_path))
+            
+            # Регистрируем семейство
+            pdfmetrics.registerFontFamily('BookFont',
+                                         normal='BookFont',
+                                         bold='BookFont-Bold')
+            
+            font_regular = 'BookFont'
+            font_bold = 'BookFont-Bold'
+            fonts_registered = True
+            
+            font_name = os.path.basename(regular_path).replace('.ttf', '')
+            print(f"✅ Загружен шрифт: {font_name}")
+            break
+    except Exception as e:
+        print(f"⚠️ Не удалось загрузить {regular_path}: {e}")
+        continue
+
+if not fonts_registered:
+    print("❌ Шрифт не найден! Используется Helvetica")
+    print("❌ Текст может отображаться неправильно!")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
@@ -82,6 +105,7 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
     """
     
     print(f"📄 Создаю PDF: {output_path}")
+    print(f"🔤 Используемый шрифт: {font_regular}")
     
     # Проверяем что все файлы существуют
     from PIL import Image
@@ -99,8 +123,8 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
     c = canvas.Canvas(output_path, pagesize=A4)
     width, height = A4
     
-    font_regular = 'MyFont' if fonts_registered else 'Helvetica'
-    font_bold = 'MyFontBold' if fonts_registered else 'Helvetica-Bold'
+    # Используем глобальные переменные шрифтов
+    global font_regular, font_bold
     
     # ========================================================================
     # ТИТУЛЬНАЯ
