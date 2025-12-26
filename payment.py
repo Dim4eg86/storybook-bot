@@ -22,7 +22,7 @@ else:
     print("⚠️ YooKassa НЕ настроена (нет ключей)")
 
 
-def create_payment(amount: int, description: str, return_url: str = None) -> dict:
+def create_payment(amount: int, description: str, return_url: str = None, customer_email: str = None) -> dict:
     """
     Создать платеж
     
@@ -30,6 +30,7 @@ def create_payment(amount: int, description: str, return_url: str = None) -> dic
         amount: Сумма в рублях
         description: Описание платежа
         return_url: URL для возврата после оплаты
+        customer_email: Email покупателя (для чека)
     
     Returns:
         {
@@ -43,38 +44,47 @@ def create_payment(amount: int, description: str, return_url: str = None) -> dic
     # Генерируем уникальный ключ идемпотентности
     idempotence_key = str(uuid.uuid4())
     
+    # Подготавливаем данные платежа
+    payment_data = {
+        "amount": {
+            "value": str(amount),
+            "currency": "RUB"
+        },
+        "confirmation": {
+            "type": "redirect",
+            "return_url": return_url or "https://t.me/your_bot"
+        },
+        "capture": True,
+        "description": description,
+        "metadata": {
+            "order_description": description
+        }
+    }
+    
+    # Добавляем чек если есть email
+    if customer_email:
+        payment_data["receipt"] = {
+            "customer": {
+                "email": customer_email
+            },
+            "items": [
+                {
+                    "description": description[:128],  # Максимум 128 символов
+                    "quantity": "1.00",
+                    "amount": {
+                        "value": str(amount),
+                        "currency": "RUB"
+                    },
+                    "vat_code": 1,  # НДС не облагается
+                    "payment_mode": "full_payment",
+                    "payment_subject": "service"
+                }
+            ]
+        }
+    
     try:
         # Создаём платеж
-        payment = Payment.create({
-            "amount": {
-                "value": str(amount),
-                "currency": "RUB"
-            },
-            "confirmation": {
-                "type": "redirect",
-                "return_url": return_url or "https://t.me/your_bot"
-            },
-            "capture": True,
-            "description": description,
-            "receipt": {
-                "items": [
-                    {
-                        "description": description,
-                        "quantity": "1.00",
-                        "amount": {
-                            "value": str(amount),
-                            "currency": "RUB"
-                        },
-                        "vat_code": 1,  # НДС не облагается
-                        "payment_mode": "full_payment",
-                        "payment_subject": "service"
-                    }
-                ]
-            },
-            "metadata": {
-                "order_description": description
-            }
-        }, idempotence_key)
+        payment = Payment.create(payment_data, idempotence_key)
         
         print(f"✅ Создан платеж {payment.id} на {amount}₽")
         
@@ -146,7 +156,8 @@ if __name__ == "__main__":
         # Создаём тестовый платеж
         payment = create_payment(
             amount=449,
-            description="Тестовый платеж - Персональная сказка"
+            description="Тестовый платеж - Персональная сказка",
+            customer_email="test@example.com"
         )
         
         if payment:
