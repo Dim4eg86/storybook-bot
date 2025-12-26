@@ -16,20 +16,24 @@ import os
 # Регистрируем детский округлый шрифт
 fonts_registered = False
 try:
-    # Comic Sans MS - классический детский шрифт
-    pdfmetrics.registerFont(TTFont('MyFont', 'C:/Windows/Fonts/comic.ttf'))
-    pdfmetrics.registerFont(TTFont('MyFontBold', 'C:/Windows/Fonts/comicbd.ttf'))
+    # Попытка загрузить Comic Sans MS или другой детский шрифт
+    # Проверяем разные возможные пути (Windows, Linux, Railway)
+    import platform
+    system = platform.system()
+    
+    if system == "Windows":
+        pdfmetrics.registerFont(TTFont('MyFont', 'C:/Windows/Fonts/comic.ttf'))
+        pdfmetrics.registerFont(TTFont('MyFontBold', 'C:/Windows/Fonts/comicbd.ttf'))
+    else:
+        # Linux/Railway - используем DejaVu Sans (предустановлен)
+        pdfmetrics.registerFont(TTFont('MyFont', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+        pdfmetrics.registerFont(TTFont('MyFontBold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
+    
     fonts_registered = True
-    print("✅ Загружен шрифт: Comic Sans MS (детский)")
-except:
-    try:
-        # Запасной вариант - Century Gothic (округлый)
-        pdfmetrics.registerFont(TTFont('MyFont', 'C:/Windows/Fonts/GOTHIC.TTF'))
-        pdfmetrics.registerFont(TTFont('MyFontBold', 'C:/Windows/Fonts/GOTHICB.TTF'))
-        fonts_registered = True
-        print("✅ Загружен шрифт: Century Gothic")
-    except:
-        print("⚠️ Используется Helvetica")
+    print(f"✅ Загружен шрифт для {system}")
+except Exception as e:
+    print(f"⚠️ Ошибка загрузки шрифта: {e}")
+    print("⚠️ Используется Helvetica (запасной шрифт)")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
@@ -149,16 +153,16 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
                    width=width, height=height,
                    preserveAspectRatio=False)  # Растягиваем!
         
-        # Градиент снизу
-        draw_smooth_gradient(c, width, height, 9*cm)
+        # Градиент снизу (выше чтобы текст было видно лучше)
+        draw_smooth_gradient(c, width, height, 10*cm)  # Было 9cm, стало 10cm
         
         # Текст с обводкой (КРУПНЫЙ детский шрифт!)
-        lines = textwrap.wrap(scene['text'], width=45)  # Уменьшил ширину для крупного шрифта
+        lines = textwrap.wrap(scene['text'], width=40)  # Было 45, стало 40 для крупного шрифта
         
-        y_offset = 9*cm - 2.5*cm
-        for line in lines[:8]:
-            draw_text_with_outline(c, width/2, y_offset, line, font_regular, 20)  # Было 18, стало 20!
-            y_offset -= 1.0*cm  # Увеличил межстрочный интервал
+        y_offset = 10*cm - 2.5*cm  # Было 9cm
+        for line in lines[:7]:  # Было 8, стало 7 строк из-за крупного шрифта
+            draw_text_with_outline(c, width/2, y_offset, line, font_regular, 22)  # Было 20, стало 22!
+            y_offset -= 1.1*cm  # Увеличил межстрочный интервал (было 1.0cm)
     
     # ========================================================================
     # ФИНАЛ
