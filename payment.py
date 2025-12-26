@@ -56,6 +56,21 @@ def create_payment(amount: int, description: str, return_url: str = None) -> dic
             },
             "capture": True,
             "description": description,
+            "receipt": {
+                "items": [
+                    {
+                        "description": description,
+                        "quantity": "1.00",
+                        "amount": {
+                            "value": str(amount),
+                            "currency": "RUB"
+                        },
+                        "vat_code": 1,  # НДС не облагается
+                        "payment_mode": "full_payment",
+                        "payment_subject": "service"
+                    }
+                ]
+            },
             "metadata": {
                 "order_description": description
             }
