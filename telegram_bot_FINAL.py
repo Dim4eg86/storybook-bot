@@ -1063,6 +1063,11 @@ def main():
             webhook_url=WEBHOOK_URL
         )
     else:
+        # Задержка 90 секунд чтобы старый контейнер Railway успел выгрузиться
+        # Это предотвращает конфликт "terminated by other getUpdates request"
+        import time
+        print("⏰ Ожидание 90 секунд перед запуском (Railway zero-downtime deployment)...")
+        time.sleep(90)
         print("📡 Запуск в POLLING режиме")
         application.run_polling()
 
