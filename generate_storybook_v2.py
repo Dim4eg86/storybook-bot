@@ -13,9 +13,19 @@ import base64
 from anthropic import Anthropic
 import pymorphy3
 
-# API ключи
-REPLICATE_API_TOKEN = "r8_cHLoTr0IAZ1D39T8XIZTf3d7vn04cLv269jLg"
-ANTHROPIC_API_KEY = "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"
+# API ключи из переменных окружения
+REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+if not ANTHROPIC_API_KEY:
+    print("❌ ANTHROPIC_API_KEY не установлен!")
+else:
+    # Показываем первые и последние символы для проверки
+    key_preview = f"{ANTHROPIC_API_KEY[:20]}...{ANTHROPIC_API_KEY[-10:]}"
+    print(f"✅ ANTHROPIC_API_KEY загружен: {key_preview}")
+    
+if not REPLICATE_API_TOKEN:
+    print("⚠️ REPLICATE_API_TOKEN не установлен!")
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
@@ -129,86 +139,16 @@ def analyze_photo(photo_path):
     
     return analysis
 
-def generate_illustration_flux(prompt, output_path):
-    """Генерирует через Flux (3 попытки)"""
-    import requests
-    import time
-    from PIL import Image
+def generate_illustration(prompt, output_path):
+    """Генерирует иллюстрацию через SDXL"""
+    print(f"   🎨 Генерирую иллюстрацию...")
     
-    max_attempts = 3
-    
-    for attempt in range(1, max_attempts + 1):
-        try:
-            if attempt > 1:
-                print(f"   🔄 Flux попытка {attempt}/{max_attempts}...")
-            
-            output = replicate.run(
-                "black-forest-labs/flux-1.1-pro",
-                input={
-                    "prompt": prompt,
-                    "aspect_ratio": "9:16",
-                    "output_format": "png",
-                    "output_quality": 100,
-                    "safety_tolerance": 6
-                }
-            )
-            
-            if isinstance(output, str):
-                image_url = output
-            elif isinstance(output, list):
-                image_url = output[0]
-            else:
-                image_url = str(output)
-            
-            print(f"   📥 Скачиваю...")
-            response = requests.get(image_url, timeout=60, stream=True)
-            response.raise_for_status()
-            
-            with open(output_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            file_size = os.path.getsize(output_path)
-            print(f"   💾 Сохранено {file_size} байт")
-            
-            time.sleep(0.5)
-            img = Image.open(output_path)
-            img.load()
-            width, height = img.size
-            
-            if attempt > 1:
-                print(f"   ✅ Flux успех! {width}x{height} (попытка {attempt})")
-            else:
-                print(f"   ✅ Flux успех! {width}x{height}")
-            
-            return True  # Успех!
-            
-        except Exception as e:
-            error_str = str(e)
-            
-            if "NSFW" in error_str:
-                if attempt < max_attempts:
-                    print(f"   ⚠️ Flux NSFW блок (seed неудачный)")
-                    time.sleep(2)
-                    continue
-                else:
-                    # Все попытки провалились
-                    return False  # Не удалось
-            else:
-                # Другая ошибка - пробрасываем
-                raise RuntimeError(f"Flux ошибка: {error_str}")
-    
-    return False  # Не удалось
-
-
-def generate_illustration_sdxl(prompt, output_path):
-    """Генерирует через SDXL (100% работает)"""
     import requests
     import time
     from PIL import Image
     
     try:
+        # Используем простой run() метод для SDXL
         output = replicate.run(
             "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
             input={
@@ -222,15 +162,19 @@ def generate_illustration_sdxl(prompt, output_path):
             }
         )
         
+        # Получаем URL (SDXL возвращает список)
         if isinstance(output, list):
             image_url = output[0]
         else:
             image_url = output
         
-        print(f"   📥 Скачиваю...")
+        print(f"   📥 Скачиваю изображение...")
+        
+        # Скачиваем
         response = requests.get(image_url, timeout=60, stream=True)
         response.raise_for_status()
         
+        # Сохраняем
         with open(output_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -239,32 +183,19 @@ def generate_illustration_sdxl(prompt, output_path):
         file_size = os.path.getsize(output_path)
         print(f"   💾 Сохранено {file_size} байт")
         
+        # Проверяем целостность
         time.sleep(0.5)
-        img = Image.open(output_path)
-        img.load()
-        width, height = img.size
-        print(f"   ✅ SDXL успех! {width}x{height}")
         
-        return True
-        
+        try:
+            img = Image.open(output_path)
+            img.load()
+            width, height = img.size
+            print(f"   ✅ Проверено: {width}x{height} пикселей")
+        except Exception as e:
+            raise ValueError(f"Файл повреждён: {e}")
+            
     except Exception as e:
-        raise RuntimeError(f"SDXL ошибка: {e}")
-
-
-def generate_illustration(prompt, output_path):
-    """ГИБРИД: Пробует Flux → если не получается → SDXL"""
-    print(f"   🎨 Генерирую (Flux → SDXL fallback)...")
-    
-    # Пробуем Flux
-    flux_success = generate_illustration_flux(prompt, output_path)
-    
-    if flux_success:
-        return "flux"  # Вернули что использовали Flux
-    
-    # Flux не сработал - пробуем SDXL
-    print(f"   🔄 Flux не сработал, переключаюсь на SDXL...")
-    generate_illustration_sdxl(prompt, output_path)
-    return "sdxl"  # Вернули что использовали SDXL
+        raise RuntimeError(f"Ошибка генерации SDXL: {e}")
 
 def create_storybook_v2(
     child_name,
@@ -275,13 +206,13 @@ def create_storybook_v2(
     story_id=None
 ):
     """
-    Создаёт персональную книгу - FLUX ВЕРСИЯ (с обходом NSFW)
+    Создаёт персональную книгу - ВЕРСИЯ 2 (все темы)
     
     Параметры:
     - child_name: имя ребёнка
     - child_age: возраст
     - gender: "boy" или "girl"
-    - theme_id: ID темы
+    - theme_id: ID темы (robot_city, space, dinosaurs, underwater, fairy_land, princess, unicorns, knight)
     - photo_path: путь к фото (опционально)
     - story_id: ID конкретной истории или None (случайная)
     """
@@ -363,15 +294,14 @@ def create_storybook_v2(
     os.makedirs(output_dir, exist_ok=True)
     
     # Генерируем иллюстрации
-    print("🎨 Генерирую 10 иллюстраций (Flux → SDXL fallback)...")
+    print("🎨 Генерирую 10 иллюстраций (это займёт ~20 минут)...")
     print()
     
     scenes_data = []
-    model_stats = {"flux": 0, "sdxl": 0}  # Статистика моделей
     
     for scene in scenes:
         scene_num = scene['number']
-        scene_title = scene.get('title', f'Сцена {scene_num}')
+        scene_title = scene.get('title', f'Сцена {scene_num}')  # Если нет title - используем номер
         print(f"Сцена {scene_num}/10: {scene_title}")
         
         # Подставляем переменные в текст
@@ -387,16 +317,16 @@ def create_storybook_v2(
         # Добавляем стиль для качества
         prompt += ", high quality, detailed, professional children's book illustration, vibrant colors, Pixar animation style"
         
-        # Генерируем иллюстрацию (ГИБРИД)
+        # Генерируем иллюстрацию
         image_filename = f"scene_{scene_num:02d}.png"
         image_path = os.path.join(output_dir, image_filename)
         
-        model_used = generate_illustration(prompt, image_path)
-        model_stats[model_used] += 1  # Собираем статистику
+        # SDXL не блокирует детские изображения!
+        generate_illustration(prompt, image_path)
         
         scenes_data.append({
             "number": scene_num,
-            "title": scene_title,
+            "title": scene_title,  # Используем опциональный title
             "text": text,
             "image": image_path
         })
@@ -445,34 +375,28 @@ def create_storybook_v2(
     print(f"📁 Папка: {output_dir}/")
     print(f"📄 PDF: {pdf_path}")
     print()
-    
-    # Показываем статистику моделей
-    print(f"📊 СТАТИСТИКА ГЕНЕРАЦИИ:")
-    print(f"   🎨 Flux: {model_stats['flux']} сцен")
-    print(f"   🎨 SDXL: {model_stats['sdxl']} сцен")
-    print()
-    
-    # Считаем себестоимость
-    flux_cost = model_stats['flux'] * 15  # 15₽ за Flux картинку
-    sdxl_cost = model_stats['sdxl'] * 1.1  # 1.1₽ за SDXL картинку
-    claude_cost = 5  # Claude анализ
-    total_cost = flux_cost + sdxl_cost + claude_cost
-    profit = 449 - 12.6 - total_cost  # Цена - YooKassa - себестоимость
-    
-    print(f"💰 ЭКОНОМИКА:")
-    print(f"   Flux: {model_stats['flux']} × 15₽ = {flux_cost:.0f}₽")
-    print(f"   SDXL: {model_stats['sdxl']} × 1.1₽ = {sdxl_cost:.1f}₽")
-    print(f"   Claude: {claude_cost}₽")
-    print(f"   Себестоимость: {total_cost:.1f}₽")
-    print(f"   Цена продажи: 449₽")
-    print(f"   YooKassa: -12.6₽")
-    print(f"   💸 Прибыль: {profit:.1f}₽")
+    print(f"💰 Себестоимость: 16₽ (SDXL)")
+    print(f"💵 Цена продажи: 449₽")
+    print(f"💸 Прибыль: 420₽")
     print()
     
     return pdf_path
 
 if __name__ == "__main__":
-    # ТЕСТ ГИБРИДНОЙ ВЕРСИИ
-    print("🎨 Гибридная версия: Flux → SDXL fallback")
-    print("Готова к использованию!")
-
+    # ПРИМЕР ИСПОЛЬЗОВАНИЯ
+    
+    # С фото
+    # create_storybook(
+    #     child_name="Саша",
+    #     child_age=6,
+    #     gender="boy",
+    #     photo_path="photo.jpg"
+    # )
+    
+    # Без фото
+    create_storybook(
+        child_name="Маша",
+        child_age=5,
+        gender="girl",
+        photo_path=None
+    )
