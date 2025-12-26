@@ -123,9 +123,6 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
     c = canvas.Canvas(output_path, pagesize=A4)
     width, height = A4
     
-    # Используем глобальные переменные шрифтов
-    global font_regular, font_bold
-    
     # ========================================================================
     # ТИТУЛЬНАЯ
     # ========================================================================
