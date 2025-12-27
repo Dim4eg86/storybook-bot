@@ -20,22 +20,12 @@ font_bold = 'Helvetica-Bold'
 
 print("🔤 Загружаю шрифт с поддержкой кириллицы...")
 
-# АВТОМАТИЧЕСКОЕ СКАЧИВАНИЕ ШРИФТОВ при первом запуске
-fonts_dir = "fonts"
-if not os.path.exists(fonts_dir):
-    os.makedirs(fonts_dir)
-
 # Пути к шрифтам DejaVu Sans (100% есть кириллица!)
 FONT_PATHS = [
     # В КОРНЕ репозитория (если пользователь загрузил туда)
     ('DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'),
     # В папке fonts/ (если пользователь загрузил туда)
-    (os.path.join(fonts_dir, 'DejaVuSans.ttf'), 
-     os.path.join(fonts_dir, 'DejaVuSans-Bold.ttf')),
-    # Comic Neue (НЕТ кириллицы, но на всякий случай)
-    ('ComicNeue-Regular.ttf', 'ComicNeue-Bold.ttf'),
-    (os.path.join(fonts_dir, 'ComicNeue-Regular.ttf'), 
-     os.path.join(fonts_dir, 'ComicNeue-Bold.ttf')),
+    ('fonts/DejaVuSans.ttf', 'fonts/DejaVuSans-Bold.ttf'),
     # Системные шрифты
     ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
@@ -45,42 +35,12 @@ FONT_PATHS = [
     ('C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf'),
 ]
 
-# Если DejaVu Sans нет - попробуем скачать
-dejavu_in_root = 'DejaVuSans.ttf'
-dejavu_in_fonts = os.path.join(fonts_dir, 'DejaVuSans.ttf')
-
-if (not os.path.exists(dejavu_in_root) and 
-    not os.path.exists(dejavu_in_fonts) and
-    not os.path.exists('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')):
-    print("📥 DejaVu Sans не найден, пробую скачать...")
-    try:
-        import urllib.request
-        
-        urls = {
-            dejavu_in_fonts: "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf",
-            os.path.join(fonts_dir, 'DejaVuSans-Bold.ttf'): "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf"
-        }
-        
-        for filepath, url in urls.items():
-            if not os.path.exists(filepath):
-                print(f"   Скачиваю {os.path.basename(filepath)}...")
-                try:
-                    urllib.request.urlretrieve(url, filepath)
-                    if os.path.exists(filepath) and os.path.getsize(filepath) > 100000:
-                        print(f"   ✅ {os.path.basename(filepath)} скачан ({os.path.getsize(filepath)} байт)")
-                    else:
-                        print(f"   ⚠️ Файл слишком маленький: {os.path.getsize(filepath) if os.path.exists(filepath) else 0} байт")
-                except Exception as e:
-                    print(f"   ⚠️ Не удалось скачать: {e}")
-    except Exception as e:
-        print(f"⚠️ Ошибка при автоматическом скачивании: {e}")
-
 # Пробуем загрузить шрифты
 for regular_path, bold_path in FONT_PATHS:
     try:
-        # Проверяем что файл существует и не пустой (больше 50KB)
-        if os.path.exists(regular_path) and os.path.getsize(regular_path) > 50000:
-            if os.path.exists(bold_path) and os.path.getsize(bold_path) > 50000:
+        # Проверяем что файл существует и не пустой (больше 100KB для полного шрифта)
+        if os.path.exists(regular_path) and os.path.getsize(regular_path) > 100000:
+            if os.path.exists(bold_path) and os.path.getsize(bold_path) > 100000:
                 pdfmetrics.registerFont(TTFont('BookFont', regular_path))
                 pdfmetrics.registerFont(TTFont('BookFont-Bold', bold_path))
                 
@@ -94,21 +54,17 @@ for regular_path, bold_path in FONT_PATHS:
                 
                 font_name = os.path.basename(regular_path).replace('.ttf', '')
                 font_size = os.path.getsize(regular_path) // 1024
-                font_location = "корень репозитория" if not os.path.dirname(regular_path) else os.path.dirname(regular_path)
-                print(f"✅ Загружен шрифт: {font_name} ({font_size} KB) из {font_location}")
-                
-                # ВАЖНО: Проверяем что это НЕ Comic Neue (у него нет кириллицы!)
-                if 'Comic' in font_name:
-                    print(f"⚠️ ВНИМАНИЕ: {font_name} может НЕ поддерживать кириллицу!")
-                    print(f"⚠️ Если текст квадратами - замените на DejaVuSans.ttf")
-                
+                font_location = "корень репозитория" if not os.path.dirname(regular_path) or os.path.dirname(regular_path) == "fonts" else "системный"
+                print(f"✅ Загружен шрифт: {font_name} ({font_size} KB) - {font_location}")
                 break
             else:
                 if os.path.exists(bold_path):
-                    print(f"⚠️ Bold файл слишком маленький: {os.path.getsize(bold_path)} байт (нужно >50KB)")
+                    bold_size = os.path.getsize(bold_path) // 1024
+                    print(f"⚠️ Bold файл слишком маленький: {bold_size} KB (нужно >100KB)")
         else:
             if os.path.exists(regular_path):
-                print(f"⚠️ Regular файл слишком маленький: {os.path.getsize(regular_path)} байт (нужно >50KB)")
+                regular_size = os.path.getsize(regular_path) // 1024
+                print(f"⚠️ Regular файл слишком маленький: {regular_size} KB (нужно >100KB)")
     except Exception as e:
         print(f"⚠️ Не удалось загрузить {os.path.basename(regular_path)}: {e}")
         continue
@@ -116,8 +72,10 @@ for regular_path, bold_path in FONT_PATHS:
 if not fonts_registered:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: Никакие шрифты с кириллицей не найдены!")
     print("❌ Используется Helvetica - текст будет КВАДРАТАМИ!")
-    print("❌ Скачайте DejaVuSans.ttf и DejaVuSans-Bold.ttf")
-    print("    и загрузите в корень репозитория")
+    print("❌ РЕШЕНИЕ:")
+    print("   1. Скачайте DejaVuSans.ttf и DejaVuSans-Bold.ttf")
+    print("   2. Загрузите их в корень репозитория на GitHub")
+    print("   3. Удалите ComicNeue файлы (они не поддерживают кириллицу!)")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
