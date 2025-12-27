@@ -20,13 +20,12 @@ font_bold = 'Helvetica-Bold'
 
 print("🔤 Загружаю шрифт с поддержкой кириллицы...")
 
-# Пути к шрифтам (в порядке приоритета)
+# Пути к системным шрифтам (будут установлены через nixpacks.toml)
 FONT_PATHS = [
-    # ЛОКАЛЬНЫЕ ФАЙЛЫ В РЕПОЗИТОРИИ (ПЕРВЫЙ ПРИОРИТЕТ!)
-    ('LiberationSans-Regular.ttf', 'LiberationSans-Bold.ttf'),
-    # Системные шрифты (запасной вариант)
+    # Liberation Sans (устанавливается через apt)
     ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
      '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
+    # DejaVu Sans (запасной)
     ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
     # Windows (для локальной разработки)
@@ -49,12 +48,7 @@ for regular_path, bold_path in FONT_PATHS:
             font_bold = 'BookFont-Bold'
             fonts_registered = True
             
-            # Определяем имя шрифта для логов
-            if os.path.isabs(regular_path):
-                font_name = os.path.basename(regular_path).replace('.ttf', '')
-            else:
-                font_name = regular_path.replace('.ttf', '') + " (локальный файл)"
-            
+            font_name = os.path.basename(regular_path).replace('.ttf', '')
             print(f"✅ Загружен шрифт: {font_name}")
             break
     except Exception as e:
@@ -64,7 +58,7 @@ for regular_path, bold_path in FONT_PATHS:
 if not fonts_registered:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: Шрифты с кириллицей не найдены!")
     print("❌ Используется Helvetica - текст будет КВАДРАТАМИ!")
-    print("❌ Добавьте файлы LiberationSans-Regular.ttf и LiberationSans-Bold.ttf в корень репозитория!")
+    print("❌ Убедитесь что nixpacks.toml содержит fonts-liberation!")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
