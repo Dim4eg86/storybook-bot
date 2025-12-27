@@ -18,47 +18,93 @@ fonts_registered = False
 font_regular = 'Helvetica'
 font_bold = 'Helvetica-Bold'
 
-print("🔤 Загружаю шрифт с поддержкой кириллицы...")
+print("🔤 Загружаю шрифт Comic Neue (детский округлый шрифт)...")
 
-# Пути к системным шрифтам (будут установлены через nixpacks.toml)
+# АВТОМАТИЧЕСКОЕ СКАЧИВАНИЕ ШРИФТОВ при первом запуске
+fonts_dir = "fonts"
+if not os.path.exists(fonts_dir):
+    os.makedirs(fonts_dir)
+
+# Пути к шрифтам Comic Neue (ищем в нескольких местах)
 FONT_PATHS = [
-    # Liberation Sans (устанавливается через apt)
+    # В КОРНЕ репозитория (если пользователь загрузил туда)
+    ('ComicNeue-Regular.ttf', 'ComicNeue-Bold.ttf'),
+    # В папке fonts/ (если пользователь загрузил туда)
+    (os.path.join(fonts_dir, 'ComicNeue-Regular.ttf'), 
+     os.path.join(fonts_dir, 'ComicNeue-Bold.ttf')),
+    # Liberation Sans (запасной вариант)
+    (os.path.join(fonts_dir, "LiberationSans-Regular.ttf"), 
+     os.path.join(fonts_dir, "LiberationSans-Bold.ttf")),
+    # Системные шрифты
     ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
      '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
-    # DejaVu Sans (запасной)
     ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
     # Windows (для локальной разработки)
     ('C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf'),
 ]
 
+# Если Comic Neue нет в корне и в fonts/ - попробуем скачать
+comic_neue_in_fonts = os.path.join(fonts_dir, 'ComicNeue-Regular.ttf')
+if (not os.path.exists('ComicNeue-Regular.ttf') and 
+    not os.path.exists(comic_neue_in_fonts)):
+    print("📥 Comic Neue не найден, пробую скачать с Google Fonts...")
+    try:
+        import urllib.request
+        
+        urls = {
+            comic_neue_in_fonts: "https://github.com/google/fonts/raw/main/ofl/comicneue/ComicNeue-Regular.ttf",
+            os.path.join(fonts_dir, 'ComicNeue-Bold.ttf'): "https://github.com/google/fonts/raw/main/ofl/comicneue/ComicNeue-Bold.ttf"
+        }
+        
+        for filepath, url in urls.items():
+            if not os.path.exists(filepath):
+                print(f"   Скачиваю {os.path.basename(filepath)}...")
+                try:
+                    urllib.request.urlretrieve(url, filepath)
+                    if os.path.exists(filepath) and os.path.getsize(filepath) > 1000:
+                        print(f"   ✅ {os.path.basename(filepath)} скачан ({os.path.getsize(filepath)} байт)")
+                except Exception as e:
+                    print(f"   ⚠️ Не удалось скачать: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка при автоматическом скачивании: {e}")
+
+# Пробуем загрузить шрифты
 for regular_path, bold_path in FONT_PATHS:
     try:
-        if os.path.exists(regular_path) and os.path.exists(bold_path):
-            # Регистрируем шрифты
-            pdfmetrics.registerFont(TTFont('BookFont', regular_path))
-            pdfmetrics.registerFont(TTFont('BookFont-Bold', bold_path))
-            
-            # Регистрируем семейство
-            pdfmetrics.registerFontFamily('BookFont',
-                                         normal='BookFont',
-                                         bold='BookFont-Bold')
-            
-            font_regular = 'BookFont'
-            font_bold = 'BookFont-Bold'
-            fonts_registered = True
-            
-            font_name = os.path.basename(regular_path).replace('.ttf', '')
-            print(f"✅ Загружен шрифт: {font_name}")
-            break
+        if os.path.exists(regular_path) and os.path.getsize(regular_path) > 1000:
+            if os.path.exists(bold_path) and os.path.getsize(bold_path) > 1000:
+                pdfmetrics.registerFont(TTFont('BookFont', regular_path))
+                pdfmetrics.registerFont(TTFont('BookFont-Bold', bold_path))
+                
+                pdfmetrics.registerFontFamily('BookFont',
+                                             normal='BookFont',
+                                             bold='BookFont-Bold')
+                
+                font_regular = 'BookFont'
+                font_bold = 'BookFont-Bold'
+                fonts_registered = True
+                
+                font_name = os.path.basename(regular_path).replace('.ttf', '')
+                font_size = os.path.getsize(regular_path) // 1024
+                font_location = "корень репозитория" if not os.path.dirname(regular_path) else os.path.dirname(regular_path)
+                print(f"✅ Загружен шрифт: {font_name} ({font_size} KB) из {font_location}")
+                break
+            else:
+                if os.path.exists(bold_path):
+                    print(f"⚠️ Bold файл слишком маленький: {os.path.getsize(bold_path)} байт")
+        else:
+            if os.path.exists(regular_path):
+                print(f"⚠️ Regular файл слишком маленький: {os.path.getsize(regular_path)} байт")
     except Exception as e:
-        print(f"⚠️ Не удалось загрузить {regular_path}: {e}")
+        print(f"⚠️ Не удалось загрузить {os.path.basename(regular_path)}: {e}")
         continue
 
 if not fonts_registered:
-    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Шрифты с кириллицей не найдены!")
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Никакие шрифты с кириллицей не найдены!")
     print("❌ Используется Helvetica - текст будет КВАДРАТАМИ!")
-    print("❌ Убедитесь что nixpacks.toml содержит fonts-liberation!")
+    print("❌ Проверьте что файлы ComicNeue-Regular.ttf и ComicNeue-Bold.ttf")
+    print("    загружены в корень репозитория или в папку fonts/")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
