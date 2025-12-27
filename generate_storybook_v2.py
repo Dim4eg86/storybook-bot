@@ -149,12 +149,14 @@ def generate_illustration(prompt, output_path):
     
     try:
         # Используем Flux Pro для максимального качества Disney/Pixar
+        # Размеры 950x1344 соответствуют точным пропорциям A4 (210x297mm)
+        # Это предотвращает деформацию персонажей при вставке в PDF!
         output = replicate.run(
             "black-forest-labs/flux-1.1-pro",
             input={
                 "prompt": prompt,
-                "width": 768,
-                "height": 1344,
+                "width": 950,    # Было 768 - изменено для пропорций A4!
+                "height": 1344,  # Сохранено
                 "num_outputs": 1,
                 "output_format": "png",
                 "output_quality": 100,
