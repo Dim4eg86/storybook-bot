@@ -18,43 +18,47 @@ fonts_registered = False
 font_regular = 'Helvetica'
 font_bold = 'Helvetica-Bold'
 
-print("🔤 Загружаю шрифт Comic Neue (детский округлый шрифт)...")
+print("🔤 Загружаю шрифт с поддержкой кириллицы...")
 
 # АВТОМАТИЧЕСКОЕ СКАЧИВАНИЕ ШРИФТОВ при первом запуске
 fonts_dir = "fonts"
 if not os.path.exists(fonts_dir):
     os.makedirs(fonts_dir)
 
-# Пути к шрифтам Comic Neue (ищем в нескольких местах)
+# Пути к шрифтам DejaVu Sans (100% есть кириллица!)
 FONT_PATHS = [
     # В КОРНЕ репозитория (если пользователь загрузил туда)
-    ('ComicNeue-Regular.ttf', 'ComicNeue-Bold.ttf'),
+    ('DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'),
     # В папке fonts/ (если пользователь загрузил туда)
+    (os.path.join(fonts_dir, 'DejaVuSans.ttf'), 
+     os.path.join(fonts_dir, 'DejaVuSans-Bold.ttf')),
+    # Comic Neue (НЕТ кириллицы, но на всякий случай)
+    ('ComicNeue-Regular.ttf', 'ComicNeue-Bold.ttf'),
     (os.path.join(fonts_dir, 'ComicNeue-Regular.ttf'), 
      os.path.join(fonts_dir, 'ComicNeue-Bold.ttf')),
-    # Liberation Sans (запасной вариант)
-    (os.path.join(fonts_dir, "LiberationSans-Regular.ttf"), 
-     os.path.join(fonts_dir, "LiberationSans-Bold.ttf")),
     # Системные шрифты
-    ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-     '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
     ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 
      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+    ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+     '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
     # Windows (для локальной разработки)
     ('C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf'),
 ]
 
-# Если Comic Neue нет в корне и в fonts/ - попробуем скачать
-comic_neue_in_fonts = os.path.join(fonts_dir, 'ComicNeue-Regular.ttf')
-if (not os.path.exists('ComicNeue-Regular.ttf') and 
-    not os.path.exists(comic_neue_in_fonts)):
-    print("📥 Comic Neue не найден, пробую скачать с Google Fonts...")
+# Если DejaVu Sans нет - попробуем скачать
+dejavu_in_root = 'DejaVuSans.ttf'
+dejavu_in_fonts = os.path.join(fonts_dir, 'DejaVuSans.ttf')
+
+if (not os.path.exists(dejavu_in_root) and 
+    not os.path.exists(dejavu_in_fonts) and
+    not os.path.exists('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')):
+    print("📥 DejaVu Sans не найден, пробую скачать...")
     try:
         import urllib.request
         
         urls = {
-            comic_neue_in_fonts: "https://github.com/google/fonts/raw/main/ofl/comicneue/ComicNeue-Regular.ttf",
-            os.path.join(fonts_dir, 'ComicNeue-Bold.ttf'): "https://github.com/google/fonts/raw/main/ofl/comicneue/ComicNeue-Bold.ttf"
+            dejavu_in_fonts: "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf",
+            os.path.join(fonts_dir, 'DejaVuSans-Bold.ttf'): "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf"
         }
         
         for filepath, url in urls.items():
@@ -62,8 +66,10 @@ if (not os.path.exists('ComicNeue-Regular.ttf') and
                 print(f"   Скачиваю {os.path.basename(filepath)}...")
                 try:
                     urllib.request.urlretrieve(url, filepath)
-                    if os.path.exists(filepath) and os.path.getsize(filepath) > 1000:
+                    if os.path.exists(filepath) and os.path.getsize(filepath) > 100000:
                         print(f"   ✅ {os.path.basename(filepath)} скачан ({os.path.getsize(filepath)} байт)")
+                    else:
+                        print(f"   ⚠️ Файл слишком маленький: {os.path.getsize(filepath) if os.path.exists(filepath) else 0} байт")
                 except Exception as e:
                     print(f"   ⚠️ Не удалось скачать: {e}")
     except Exception as e:
@@ -72,8 +78,9 @@ if (not os.path.exists('ComicNeue-Regular.ttf') and
 # Пробуем загрузить шрифты
 for regular_path, bold_path in FONT_PATHS:
     try:
-        if os.path.exists(regular_path) and os.path.getsize(regular_path) > 1000:
-            if os.path.exists(bold_path) and os.path.getsize(bold_path) > 1000:
+        # Проверяем что файл существует и не пустой (больше 50KB)
+        if os.path.exists(regular_path) and os.path.getsize(regular_path) > 50000:
+            if os.path.exists(bold_path) and os.path.getsize(bold_path) > 50000:
                 pdfmetrics.registerFont(TTFont('BookFont', regular_path))
                 pdfmetrics.registerFont(TTFont('BookFont-Bold', bold_path))
                 
@@ -89,13 +96,19 @@ for regular_path, bold_path in FONT_PATHS:
                 font_size = os.path.getsize(regular_path) // 1024
                 font_location = "корень репозитория" if not os.path.dirname(regular_path) else os.path.dirname(regular_path)
                 print(f"✅ Загружен шрифт: {font_name} ({font_size} KB) из {font_location}")
+                
+                # ВАЖНО: Проверяем что это НЕ Comic Neue (у него нет кириллицы!)
+                if 'Comic' in font_name:
+                    print(f"⚠️ ВНИМАНИЕ: {font_name} может НЕ поддерживать кириллицу!")
+                    print(f"⚠️ Если текст квадратами - замените на DejaVuSans.ttf")
+                
                 break
             else:
                 if os.path.exists(bold_path):
-                    print(f"⚠️ Bold файл слишком маленький: {os.path.getsize(bold_path)} байт")
+                    print(f"⚠️ Bold файл слишком маленький: {os.path.getsize(bold_path)} байт (нужно >50KB)")
         else:
             if os.path.exists(regular_path):
-                print(f"⚠️ Regular файл слишком маленький: {os.path.getsize(regular_path)} байт")
+                print(f"⚠️ Regular файл слишком маленький: {os.path.getsize(regular_path)} байт (нужно >50KB)")
     except Exception as e:
         print(f"⚠️ Не удалось загрузить {os.path.basename(regular_path)}: {e}")
         continue
@@ -103,8 +116,8 @@ for regular_path, bold_path in FONT_PATHS:
 if not fonts_registered:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: Никакие шрифты с кириллицей не найдены!")
     print("❌ Используется Helvetica - текст будет КВАДРАТАМИ!")
-    print("❌ Проверьте что файлы ComicNeue-Regular.ttf и ComicNeue-Bold.ttf")
-    print("    загружены в корень репозитория или в папку fonts/")
+    print("❌ Скачайте DejaVuSans.ttf и DejaVuSans-Bold.ttf")
+    print("    и загрузите в корень репозитория")
 
 def draw_smooth_gradient(c, width, height, overlay_height):
     """Плавный ТЁМНЫЙ градиент для хорошей читаемости"""
@@ -176,9 +189,10 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
     # ========================================================================
     
     # Фон - первая иллюстрация (растянуть на всю страницу БЕЗ серых полос!)
+    # preserveAspectRatio=False безопасен т.к. изображения генерируются в пропорциях A4 (950x1344)
     c.drawImage(scenes_data[0]['image'], 0, 0, 
                 width=width, height=height,
-                preserveAspectRatio=False)  # Растягиваем!
+                preserveAspectRatio=False)
     
     # Градиент сверху (УМЕНЬШЕН с 12см до 8см - не закрывает лицо!)
     gradient_height = 8*cm  # Было 12*cm
@@ -218,9 +232,10 @@ def create_book_from_data(child_name, child_age, scenes_data, output_path, theme
         c.showPage()
         
         # Фон - растягиваем на всю страницу БЕЗ серых полос!
+        # preserveAspectRatio=False безопасен т.к. изображения генерируются в пропорциях A4 (950x1344)
         c.drawImage(scene['image'], 0, 0, 
                    width=width, height=height,
-                   preserveAspectRatio=False)  # Растягиваем!
+                   preserveAspectRatio=False)
         
         # Градиент снизу (выше чтобы текст было видно лучше)
         draw_smooth_gradient(c, width, height, 10*cm)  # Было 9cm, стало 10cm
