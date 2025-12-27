@@ -711,9 +711,16 @@ async def process_payment(update, context):
         await start_generation(update, context)
         return ConversationHandler.END
     
+    # 💰 СПЕЦИАЛЬНАЯ ЦЕНА ДЛЯ ВЛАДЕЛЬЦА
+    user_username = update.effective_user.username
+    if user_username and user_username.lower() == "dim4eg86":
+        price = 5  # Тестовая цена для владельца
+    else:
+        price = BOOK_PRICE  # Обычная цена 449₽
+    
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
     payment_data = create_payment(
-        amount=BOOK_PRICE,
+        amount=price,
         description=f"Персональная сказка про {name}",
         return_url=f"https://t.me/{BOT_USERNAME}",
         customer_email="noreply@storybook.ru"  # Фиктивный email для чека
@@ -733,7 +740,7 @@ async def process_payment(update, context):
         payment_id=payment_data['id'],
         order_id=order_id,
         user_id=user_id,
-        amount=BOOK_PRICE,
+        amount=price,  # Используем персональную цену
         payment_url=payment_data['confirmation_url']
     )
     
@@ -741,7 +748,7 @@ async def process_payment(update, context):
     
     # ОТПРАВЛЯЕМ КНОПКУ ОПЛАТЫ
     keyboard = [[InlineKeyboardButton(
-        f"💳 Оплатить {BOOK_PRICE}₽", 
+        f"💳 Оплатить {price}₽",  # Используем персональную цену
         url=payment_data['confirmation_url']
     )]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -751,7 +758,7 @@ async def process_payment(update, context):
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
-            f"💰 *Стоимость: {BOOK_PRICE}₽*\n\n"
+            f"💰 *Стоимость: {price}₽*\n\n"  # Используем персональную цену
             f"📖 Сказка про {name}\n"
             f"🎨 10 страниц с иллюстрациями Disney/Pixar качества\n"
             f"📄 PDF файл для печати\n\n"
