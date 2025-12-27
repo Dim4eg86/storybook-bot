@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Telegram бот для создания персонализированных детских книг
-✅ С ПАТЧЕМ СТАБИЛЬНОСТИ для высоких нагрузок (40k+ охват)
+Telegram бот для персональных сказок - ФИНАЛЬНАЯ ВЕРСИЯ
+8 тем + YooKassa оплата + База данных
 """
 
-import os
-import sqlite3
-from datetime import datetime
-import asyncio
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    CallbackQueryHandler, 
-    MessageHandler, 
-    PreCheckoutQueryHandler,
-    filters, 
-    ContextTypes,
-    ConversationHandler
+    Application, CommandHandler, MessageHandler, 
+    CallbackQueryHandler, ContextTypes, filters, ConversationHandler
 )
-
-# ✅ ПАТЧ СТАБИЛЬНОСТИ: Импорты для устойчивости к ошибкам
-from telegram.request import HTTPXRequest
+import os
+import json
 import logging
 import traceback
+from telegram.request import HTTPXRequest
 
 # ✅ ПАТЧ СТАБИЛЬНОСТИ: Настройка логирования
 logging.basicConfig(
@@ -33,367 +23,972 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Переменные окружения
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY')
-YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-REPLICATE_API_TOKEN = os.getenv('REPLICATE_API_TOKEN')
+# Импортируем модули
+from generate_storybook_v2 import create_storybook_v2
+from payment import create_payment, is_payment_successful
+from database import db
 
-# Состояния conversation
-WAITING_NAME, WAITING_AGE, WAITING_THEME, WAITING_PHOTO = range(4)
+# НАСТРОЙКИ
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "Sefirum_storybook_bot")  # Username бота без @
 
-# Темы для книг
-THEMES = {
-    'princess': '👸 Принцесса',
-    'space': '🚀 Космос',
-    'ocean': '🌊 Океан',
-    'forest': '🌲 Лес',
-    'city': '🏙️ Город',
-    'magic': '✨ Магия'
-}
+# YooKassa (из переменных окружения)
+YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
+YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
+PAYMENT_ENABLED = bool(YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY)
 
-# Инициализация базы данных
-def init_db():
-    """Создание таблиц базы данных"""
-    conn = sqlite3.connect('storybook_bot.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            order_id TEXT PRIMARY KEY,
-            user_id INTEGER,
-            child_name TEXT,
-            child_age INTEGER,
-            theme TEXT,
-            photo_path TEXT,
-            status TEXT DEFAULT 'pending',
-            amount REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+# Админ для статистики
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
-# Сохранение пользователя
-def save_user(user_id: int, username: str = None, first_name: str = None):
-    """Сохранение информации о пользователе"""
-    conn = sqlite3.connect('storybook_bot.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT OR IGNORE INTO users (user_id, username, first_name)
-        VALUES (?, ?, ?)
-    ''', (user_id, username, first_name))
-    
-    conn.commit()
-    conn.close()
+# Цена
+BOOK_PRICE = 449  # рублей
 
-# Команда /start
+# Состояния разговора
+CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
+
+
+def decline_name_accusative(name, gender):
+    """Склоняет имя в винительный падеж"""
+    name_lower = name.lower()
+    
+    if name_lower.endswith('а') or name_lower.endswith('я'):
+        if name_lower.endswith('а'):
+            return name[:-1] + 'у'
+        else:
+            return name[:-1] + 'ю'
+    
+    if gender == "boy":
+        if name_lower.endswith('й'):
+            return name[:-1] + 'я'
+        elif name_lower.endswith('ь'):
+            return name[:-1] + 'я'
+        else:
+            return name + 'а'
+    
+    return name
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
-    user = update.effective_user
-    save_user(user.id, user.username, user.first_name)
+    """Начало работы бота - КРАСИВОЕ ПРИВЕТСТВИЕ"""
     
+    # Регистрируем пользователя в БД
+    user = update.effective_user
+    db.add_user(user.id, user.username, user.first_name, user.last_name)
+    
+    # Кнопки - ПО ОДНОЙ В РЯД!
     keyboard = [
-        [InlineKeyboardButton("📚 Создать книгу", callback_data='create_storybook')],
-        [InlineKeyboardButton("ℹ️ О боте", callback_data='about')]
+        [InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")],
+        [InlineKeyboardButton("📚 Посмотреть примеры", callback_data="show_examples")],
+        [InlineKeyboardButton("❓ Как это работает?", callback_data="how_it_works")],
+        [InlineKeyboardButton("📞 Поддержка", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        f"👋 Привет, {user.first_name}!\n\n"
-        "🎨 Я создаю персонализированные детские книги с иллюстрациями!\n\n"
-        "✨ Особенности:\n"
-        "• Ребёнок - главный герой\n"
-        "• Профессиональные иллюстрации Disney/Pixar\n"
-        "• Уникальная история\n"
-        "• PDF формат для печати\n\n"
-        "💰 Цена: 449₽",
+    # Отправляем welcome картинку С КНОПКАМИ
+    welcome_path = 'welcome.jpg'
+    if os.path.exists(welcome_path):
+        with open(welcome_path, 'rb') as photo:
+            await update.message.reply_photo(
+                photo=photo,
+                caption=(
+                    "✨ *Персональная сказка про вашего ребёнка!*\n\n"
+                    "Я создам красочную книгу с AI-иллюстрациями Disney/Pixar качества, "
+                    "где ваш малыш — главный герой волшебного приключения!\n\n"
+                    "📖 *Что вы получите:*\n"
+                    "• 10 страниц с иллюстрациями\n"
+                    "• 8 увлекательных тем на выбор\n"
+                    "• Персонаж похож на вашего ребёнка\n"
+                    "• Профессиональное качество\n"
+                    "• PDF файл для печати\n\n"
+                    f"💰 Цена: {BOOK_PRICE}₽\n"
+                    "⏱️ Готово за 5 минут\n\n"
+                    "*Выберите действие:*"
+                ),
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+    else:
+        # Если нет картинки - просто текст с кнопками
+        await update.message.reply_text(
+            "✨ *Персональная сказка про вашего ребёнка!*\n\n"
+            "Я создам красочную книгу с AI-иллюстрациями Disney/Pixar качества, "
+            "где ваш малыш — главный герой волшебного приключения!\n\n"
+            "📖 *Что вы получите:*\n"
+            "• 10 страниц с иллюстрациями\n"
+            "• 8 увлекательных тем на выбор\n"
+            "• Персонаж похож на вашего ребёнка\n"
+            "• Профессиональное качество\n"
+            "• PDF файл для печати\n\n"
+            f"💰 Цена: {BOOK_PRICE}₽\n"
+            "⏱️ Готово за 5 минут\n\n"
+            "*Выберите действие:*",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+async def show_examples_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показываем примеры работ - КНОПКИ СО ССЫЛКАМИ!"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Кнопки с примерами
+    keyboard = [
+        [InlineKeyboardButton("🦕 Саша с динозаврами", url="https://drive.google.com/file/d/1FIVkCSMI-mjhXX236O8FYhiHCJB4_N_C/preview")],
+        [InlineKeyboardButton("🧚 Юлиана в стране фей", url="https://drive.google.com/file/d/1CphV74SQA-s4q3NwsBQNW92gHla-DLLS/preview")],
+        [InlineKeyboardButton("⭐ Создать свою сказку", callback_data="create_story")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "✨ *Взгляните на примеры наших сказок!*\n\n"
+            "Выше — реальные иллюстрации из книг, которые мы создаем. "
+            "Каждая история уникальна, а картинки рисуются специально "
+            "под сюжет и внешность ребенка. 🎨\n\n"
+            "*Хотите увидеть, как выглядит полная книга?*\n\n"
+            "Нажмите на кнопки ниже, чтобы открыть PDF-примеры"
+        ),
+        parse_mode='Markdown',
         reply_markup=reply_markup
     )
 
-# Начало создания книги
-async def create_storybook_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало процесса создания книги"""
+
+async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показываем как работает бот"""
     query = update.callback_query
     await query.answer()
     
-    await query.edit_message_text(
-        "📝 Как зовут ребёнка?\n\n"
-        "Напишите имя (например: Маша, Саша, Артём)"
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "❓ *Как это работает?*\n\n"
+            "Создание персональной сказки — это просто!\n\n"
+            "*Шаг 1. Выберите тему* 🎨\n"
+            "8 волшебных историй на выбор:\n"
+            "• 🤖 Город роботов\n"
+            "• 🚀 Космическое приключение\n"
+            "• 🦕 Долина динозавров\n"
+            "• 🌊 Подводное царство\n"
+            "• 🧚 Страна фей\n"
+            "• 👑 Королевство принцесс\n"
+            "• 🦄 Волшебные единороги\n"
+            "• 🏰 Рыцарь и дракон\n\n"
+            "*Шаг 2. Укажите пол героя* 👦👧\n"
+            "Мальчик или девочка?\n\n"
+            "*Шаг 3. Напишите имя* ✍️\n"
+            "Ваш ребёнок станет главным героем!\n\n"
+            "*Шаг 4. Укажите возраст* 🎂\n"
+            "Просто цифра (любой возраст)\n\n"
+            "*Шаг 5. Загрузите фото (опционально)* 📸\n"
+            "Я проанализирую внешность:\n"
+            "• Цвет волос\n"
+            "• Цвет глаз\n"
+            "• Особенности (веснушки, очки)\n"
+            "Можно пропустить — создам типичного персонажа.\n\n"
+            "*Шаг 6. Оплатите* 💳\n"
+            f"Цена: {BOOK_PRICE}₽\n\n"
+            "*Шаг 7. Получите книгу!* 📖\n"
+            "⏱️ Готово за 5 минут\n"
+            "• 10 страниц с иллюстрациями\n"
+            "• Disney/Pixar качество\n"
+            "• PDF файл для печати или чтения\n\n"
+            "Всё просто! Начнём? 😊"
+        ),
+        parse_mode='Markdown'
     )
     
-    return WAITING_NAME
-
-# Получение имени
-async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение имени ребёнка"""
-    context.user_data['child_name'] = update.message.text.strip()
+    keyboard = [[InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        "👶 Сколько лет ребёнку?\n\n"
-        "Напишите возраст (например: 5)"
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="Готовы создать сказку?",
+        reply_markup=reply_markup
     )
-    
-    return WAITING_AGE
 
-# Получение возраста
-async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение возраста ребёнка"""
-    try:
-        age = int(update.message.text.strip())
-        if age < 1 or age > 12:
-            await update.message.reply_text(
-                "❌ Возраст должен быть от 1 до 12 лет.\n"
-                "Попробуйте ещё раз:"
-            )
-            return WAITING_AGE
-        
-        context.user_data['child_age'] = age
-        
-        # Показываем темы
-        keyboard = []
-        for theme_id, theme_name in THEMES.items():
-            keyboard.append([InlineKeyboardButton(theme_name, callback_data=f'theme_{theme_id}')])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "🎨 Выберите тему книги:",
-            reply_markup=reply_markup
-        )
-        
-        return WAITING_THEME
-        
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Введите число.\n"
-            "Попробуйте ещё раз:"
-        )
-        return WAITING_AGE
 
-# Получение темы
-async def receive_theme(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение темы книги"""
+async def support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запускаем режим поддержки - пользователь пишет прямо в бота"""
     query = update.callback_query
     await query.answer()
     
-    theme = query.data.replace('theme_', '')
-    context.user_data['theme'] = theme
+    context.user_data['support_mode'] = True
+    print(f"📞 Включен режим поддержки для пользователя {query.from_user.id}")
+    
+    keyboard = [[InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "📞 *Служба поддержки*\n\n"
+            "Напишите ваш вопрос или проблему, и я передам его администратору.\n\n"
+            "*Мы отвечаем:*\n"
+            "• По вопросам оплаты — моментально\n"
+            "• Технические вопросы — в течение часа\n"
+            "• Общие вопросы — в течение 2-3 часов\n\n"
+            "✍️ Напишите сообщение:"
+        ),
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+
+async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяем режим поддержки"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['support_mode'] = False
+    print(f"❌ Отменен режим поддержки для пользователя {query.from_user.id}")
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="✅ Отменено. Используйте /start для возврата в главное меню."
+    )
+
+
+async def admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ нажал кнопку 'Свой ответ' - включаем режим ответа"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Проверка что это админ
+    if query.from_user.id != ADMIN_ID:
+        return
+    
+    # Извлекаем user_id из callback_data
+    user_id = int(query.data.split('_')[2])
+    
+    # Сохраняем в контекст что админ отвечает этому пользователю
+    context.user_data['admin_replying_to'] = user_id
     
     await query.edit_message_text(
-        "📸 Загрузите фото ребёнка\n\n"
-        "• Фото лица крупным планом\n"
-        "• Хорошее освещение\n"
-        "• Анфас (прямо в камеру)\n\n"
-        "Отправьте фото:"
-    )
-    
-    return WAITING_PHOTO
-
-# Получение фото
-async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение фото ребёнка"""
-    if not update.message.photo:
-        await update.message.reply_text(
-            "❌ Пожалуйста, отправьте фото.\n"
-            "Попробуйте ещё раз:"
-        )
-        return WAITING_PHOTO
-    
-    # Сохраняем фото
-    photo = update.message.photo[-1]
-    file = await context.bot.get_file(photo.file_id)
-    
-    photo_path = f"photos/{update.effective_user.id}_{datetime.now().timestamp()}.jpg"
-    os.makedirs('photos', exist_ok=True)
-    await file.download_to_drive(photo_path)
-    
-    context.user_data['photo_path'] = photo_path
-    
-    # Показываем счёт на оплату
-    await show_invoice(update, context)
-    
-    return ConversationHandler.END
-
-# Показ счёта
-async def show_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправка счёта на оплату"""
-    child_name = context.user_data['child_name']
-    child_age = context.user_data['child_age']
-    theme = THEMES[context.user_data['theme']]
-    
-    # Создаём заказ в базе
-    order_id = f"order_{update.effective_user.id}_{datetime.now().timestamp()}"
-    
-    conn = sqlite3.connect('storybook_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO orders (order_id, user_id, child_name, child_age, theme, photo_path, amount)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (order_id, update.effective_user.id, child_name, child_age, 
-          context.user_data['theme'], context.user_data['photo_path'], 449))
-    conn.commit()
-    conn.close()
-    
-    context.user_data['order_id'] = order_id
-    
-    # Отправляем счёт
-    await context.bot.send_invoice(
-        chat_id=update.effective_user.id,
-        title="Персонализированная детская книга",
-        description=f"Книга для {child_name}, {child_age} лет\nТема: {theme}",
-        payload=order_id,
-        provider_token=YOOKASSA_SECRET_KEY,
-        currency='RUB',
-        prices=[LabeledPrice("Книга", 44900)],  # в копейках
-        start_parameter='create_storybook'
+        text=query.message.text + "\n\n<b>✍️ Напишите ваш ответ:</b>",
+        parse_mode='HTML'
     )
 
-# Pre-checkout
-async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Проверка перед оплатой"""
-    query = update.pre_checkout_query
-    await query.answer(ok=True)
 
-# Успешная оплата
-async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка успешной оплаты"""
-    payment = update.message.successful_payment
-    order_id = payment.invoice_payload
+async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем текст ответа от админа"""
     
-    # Обновляем статус заказа
-    conn = sqlite3.connect('storybook_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE orders SET status = 'paid' WHERE order_id = ?
-    ''', (order_id,))
-    conn.commit()
+    # Проверяем что это админ и он в режиме ответа
+    if update.effective_user.id != ADMIN_ID:
+        return
     
-    # Получаем данные заказа
-    cursor.execute('''
-        SELECT child_name, child_age, theme, photo_path 
-        FROM orders WHERE order_id = ?
-    ''', (order_id,))
-    child_name, child_age, theme, photo_path = cursor.fetchone()
-    conn.close()
+    user_id = context.user_data.get('admin_replying_to')
+    if not user_id:
+        return
     
-    await update.message.reply_text(
-        "✅ Оплата прошла успешно!\n\n"
-        "🎨 Начинаю создавать книгу...\n"
-        "⏱️ Это займёт 5-7 минут.\n\n"
-        "Я пришлю готовую книгу в этот чат!"
-    )
+    reply_text = update.message.text
     
-    # Запускаем создание книги в фоне
-    asyncio.create_task(generate_book(update, context, order_id, child_name, child_age, theme, photo_path))
-
-# Генерация книги (заглушка - нужно подключить твою функцию)
-async def generate_book(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                       order_id: str, child_name: str, child_age: int, theme: str, photo_path: str):
-    """Генерация книги"""
+    # Отключаем режим ответа
+    context.user_data['admin_replying_to'] = None
+    
+    # Экранируем HTML
+    safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    
     try:
-        # ВАЖНО: Здесь нужно вызвать твою функцию create_storybook_v2
-        # Раскомментируй и адаптируй:
-        # 
-        # from generate_storybook_v2 import create_storybook_v2
-        # pdf_path = await create_storybook_v2(child_name, child_age, theme, photo_path)
-        # 
-        # await context.bot.send_document(
-        #     chat_id=update.effective_user.id,
-        #     document=open(pdf_path, 'rb'),
-        #     caption=f"📚 Готово! Книга для {child_name}!"
-        # )
-        
-        # Временная заглушка:
-        await asyncio.sleep(5)
+        # Отправляем ответ пользователю
         await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text=f"📚 Книга готова! (это заглушка, подключи generate_storybook_v2.py)"
+            chat_id=user_id,
+            text=(
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{safe_reply}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
+            ),
+            parse_mode='HTML'
+        )
+        
+        # Подтверждение админу
+        await update.message.reply_text(f"✅ Ответ отправлен пользователю {user_id}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
+
+
+async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем быстрые ответы (кнопки)"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Проверка что это админ
+    if query.from_user.id != ADMIN_ID:
+        return
+    
+    # Извлекаем тип ответа и user_id
+    parts = query.data.split('_')
+    reply_type = parts[1]
+    user_id = int(parts[2])
+    
+    # Готовые ответы
+    quick_replies = {
+        'paid': '✅ Ваш платёж получен! Книга отправляется сейчас.',
+        'wait': '⏳ Ваша книга генерируется. Это займёт 3-5 минут. Пожалуйста, подождите!',
+        'error': '❌ Произошла ошибка. Мы уже работаем над решением. Напишите мне через несколько минут.',
+        'howto': '👌 Создание сказки простое: нажмите /start → ⭐ Создать сказку → следуйте инструкциям. Цена 449₽.',
+        'balance': '💰 Проверяю ваш платёж... Один момент!',
+        'quality': '🎨 Все иллюстрации создаются с помощью AI Disney/Pixar качества. Гарантируем высокое качество!'
+    }
+    
+    reply_text = quick_replies.get(reply_type, 'Спасибо за обращение!')
+    
+    try:
+        # Отправляем ответ пользователю
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{reply_text}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
+            ),
+            parse_mode='HTML'
+        )
+        
+        # Обновляем сообщение админу
+        await query.edit_message_text(
+            text=query.message.text + f"\n\n<b>✅ Отправлен быстрый ответ: {reply_type}</b>",
+            parse_mode='HTML'
         )
         
     except Exception as e:
-        logger.error(f"Error generating book: {e}")
-        logger.error(traceback.format_exc())
-        await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text="❌ Произошла ошибка при создании книги. Свяжитесь с поддержкой."
-        )
+        await query.message.reply_text(f"❌ Ошибка отправки: {e}")
 
-# О боте
-async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Информация о боте"""
-    query = update.callback_query
-    await query.answer()
+
+async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатываем сообщение в режиме поддержки"""
     
-    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_start')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Если это админ в режиме ответа - обрабатываем отдельно
+    if update.effective_user.id == ADMIN_ID and context.user_data.get('admin_replying_to'):
+        await handle_admin_reply(update, context)
+        return
     
-    await query.edit_message_text(
-        "ℹ️ **О боте**\n\n"
-        "Я создаю персонализированные детские книги!\n\n"
-        "✨ **Что я умею:**\n"
-        "• Генерирую уникальную историю\n"
-        "• Создаю 10 иллюстраций Disney/Pixar\n"
-        "• Делаю ребёнка главным героем\n"
-        "• Формирую PDF для печати\n\n"
-        "💰 **Цена:** 449₽\n"
-        "⏱️ **Время создания:** 5-7 минут",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
+    # Проверяем режим поддержки
+    support_mode = context.user_data.get('support_mode', False)
+    print(f"📝 Получено сообщение. Support mode: {support_mode}")
+    
+    if not support_mode:
+        return
+    
+    user = update.effective_user
+    user_message = update.message.text
+    
+    print(f"📩 Обрабатываем сообщение в поддержку от {user.id}: {user_message}")
+    
+    # Отключаем режим поддержки
+    context.user_data['support_mode'] = False
+    
+    # Отправляем подтверждение пользователю
+    await update.message.reply_text(
+        "✅ Ваше сообщение отправлено в поддержку!\n\n"
+        "Мы ответим вам в ближайшее время прямо здесь, в боте.\n\n"
+        "Используйте /start для возврата в главное меню."
     )
+    
+    # Пересылаем админу
+    if ADMIN_ID:
+        # Экранируем HTML символы
+        safe_name = (user.first_name or 'Без имени').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        safe_username = (user.username or 'нет').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        safe_message = user_message.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        admin_text = (
+            f"📩 <b>Новое обращение в поддержку</b>\n\n"
+            f"👤 User ID: {user.id}\n"
+            f"👤 Username: @{safe_username}\n"
+            f"💬 Сообщение:\n{safe_message}"
+        )
+        
+        # Кнопки для ответа
+        keyboard = [
+            [InlineKeyboardButton("✍️ Свой ответ", callback_data=f"admin_reply_{user.id}")],
+            [
+                InlineKeyboardButton("✅ Оплачено", callback_data=f"quick_paid_{user.id}"),
+                InlineKeyboardButton("⏳ Ждите", callback_data=f"quick_wait_{user.id}")
+            ],
+            [
+                InlineKeyboardButton("❌ Ошибка", callback_data=f"quick_error_{user.id}"),
+                InlineKeyboardButton("👌 Как работает?", callback_data=f"quick_howto_{user.id}")
+            ],
+            [InlineKeyboardButton("💰 Баланс", callback_data=f"quick_balance_{user.id}")],
+            [InlineKeyboardButton("🎨 Качество", callback_data=f"quick_quality_{user.id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=admin_text,
+                parse_mode='HTML',
+                reply_markup=reply_markup
+            )
+            print(f"✅ Сообщение отправлено админу {ADMIN_ID}")
+        except Exception as e:
+            print(f"❌ Ошибка отправки админу: {e}")
 
-# Возврат в главное меню
-async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Возврат в главное меню"""
+
+async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для ответа пользователю: /reply USER_ID текст"""
+    
+    # Проверка что это админ
+    if update.effective_user.id != ADMIN_ID:
+        return
+    
+    # Проверяем аргументы
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Использование: /reply USER_ID текст ответа\n\n"
+            "Пример: /reply 123456789 Здравствуйте! Ваш вопрос решён."
+        )
+        return
+    
+    try:
+        user_id = int(context.args[0])
+        reply_text = ' '.join(context.args[1:])
+        
+        # Экранируем HTML символы
+        safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # Отправляем ответ пользователю
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"📞 <b>Ответ от поддержки:</b>\n\n"
+                f"{safe_reply}\n\n"
+                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
+            ),
+            parse_mode='HTML'
+        )
+        
+        # Подтверждение админу
+        await update.message.reply_text(
+            f"✅ Ответ отправлен пользователю {user_id}"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный ID пользователя")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
+
+
+async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показываем выбор темы - ВСЕ 8 ТЕМ СРАЗУ"""
     query = update.callback_query
     await query.answer()
     
+    # Загружаем темы
+    with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
+        themes = json.load(f)
+    
+    # Создаём кнопки - ВСЕ 8 ТЕМ (2 в ряду)
     keyboard = [
-        [InlineKeyboardButton("📚 Создать книгу", callback_data='create_storybook')],
-        [InlineKeyboardButton("ℹ️ О боте", callback_data='about')]
+        [InlineKeyboardButton(themes["robot_city"]["name"], callback_data="theme_robot_city"),
+         InlineKeyboardButton(themes["space"]["name"], callback_data="theme_space")],
+        [InlineKeyboardButton(themes["dinosaurs"]["name"], callback_data="theme_dinosaurs"),
+         InlineKeyboardButton(themes["underwater"]["name"], callback_data="theme_underwater")],
+        [InlineKeyboardButton(themes["fairy_land"]["name"], callback_data="theme_fairy_land"),
+         InlineKeyboardButton(themes["princess"]["name"], callback_data="theme_princess")],
+        [InlineKeyboardButton(themes["unicorns"]["name"], callback_data="theme_unicorns"),
+         InlineKeyboardButton(themes["knight"]["name"], callback_data="theme_knight")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        "👋 Главное меню\n\n"
-        "Выберите действие:",
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "🎨 *Выбери тему сказки:*\n\n"
+            "📖 8 волшебных историй на выбор!"
+        ),
+        parse_mode='Markdown',
         reply_markup=reply_markup
     )
+    
+    return CHOOSING_THEME
 
-# Отмена
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена создания книги"""
+
+async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тема выбрана, спрашиваем пол"""
+    query = update.callback_query
+    await query.answer()
+    
+    theme_id = query.data.replace("theme_", "")
+    context.user_data['theme'] = theme_id
+    
+    # Загружаем название темы
+    with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
+        themes = json.load(f)
+    theme_name = themes[theme_id]["name"]
+    
+    keyboard = [
+        [InlineKeyboardButton("👦 Мальчик", callback_data="gender_boy")],
+        [InlineKeyboardButton("👧 Девочка", callback_data="gender_girl")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"✅ Тема: {theme_name}\n\n👶 Кто будет главным героем?",
+        reply_markup=reply_markup
+    )
+    
+    return CHOOSING_GENDER
+
+
+async def gender_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пол выбран - переходим к имени"""
+    query = update.callback_query
+    await query.answer()
+    
+    gender = "boy" if query.data == "gender_boy" else "girl"
+    context.user_data['gender'] = gender
+    
+    gender_ru = "мальчик" if gender == "boy" else "девочка"
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"Отлично! Герой — {gender_ru} 👍\n\n📝 *Напишите имя ребёнка:*",
+        parse_mode='Markdown'
+    )
+    
+    return GETTING_NAME
+
+
+async def name_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получено имя - просим возраст"""
+    name = update.message.text.strip()
+    
+    # Проверка имени
+    if len(name) < 2 or len(name) > 20:
+        await update.message.reply_text(
+            "⚠️ Имя должно быть от 2 до 20 символов.\n"
+            "Попробуйте ещё раз:"
+        )
+        return GETTING_NAME
+    
+    context.user_data['name'] = name
+    
     await update.message.reply_text(
-        "❌ Создание книги отменено.\n\n"
-        "Отправьте /start чтобы начать заново."
+        f"Замечательно, {name}! 😊\n\n"
+        f"🎂 *Сколько лет {name}?*\n\n"
+        f"Напишите возраст (просто цифру)",
+        parse_mode='Markdown'
+    )
+    
+    return GETTING_AGE
+
+
+async def age_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получен возраст"""
+    age_text = update.message.text.strip()
+    
+    # Проверяем что это цифра
+    try:
+        age = int(age_text)
+        if age < 1 or age > 12:
+            raise ValueError
+    except:
+        await update.message.reply_text(
+            "⚠️ Пожалуйста, напишите возраст цифрой от 1 до 12.\n"
+            "Например: 5"
+        )
+        return GETTING_AGE
+    
+    context.user_data['age'] = age
+    
+    # Переходим к фото
+    keyboard = [
+        [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
+        [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_photo")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"📸 *Хотите, чтобы герой был похож на вашего ребёнка?*\n\n"
+        f"Загрузите фото, и я проанализирую внешность:\n"
+        f"• Цвет волос\n"
+        f"• Цвет глаз\n"
+        f"• Особенности (веснушки, очки)\n\n"
+        f"Или пропустите — создам типичного персонажа.",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    return GETTING_PHOTO
+
+
+async def want_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пользователь хочет загрузить фото"""
+    query = update.callback_query
+    await query.answer()
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "📸 Отлично! Загрузите фото ребёнка.\n\n"
+            "💡 Для лучшего результата:\n"
+            "• Фото анфас (лицом к камере)\n"
+            "• Хорошее освещение\n"
+            "• Ребёнок один на фото"
+        )
+    )
+    
+    return GETTING_PHOTO
+
+
+async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получено фото"""
+    photo_file = await update.message.photo[-1].get_file()
+    
+    # Сохраняем фото
+    user_id = update.effective_user.id
+    photo_path = f"temp_photo_{user_id}.jpg"
+    await photo_file.download_to_drive(photo_path)
+    
+    context.user_data['photo_path'] = photo_path
+    
+    # Переходим к оплате
+    await process_payment(update, context)
+    return PAYMENT
+
+
+async def skip_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пользователь пропустил фото"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['photo_path'] = None
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="Хорошо! Создам персонажа без фото."
+    )
+    
+    # Переходим к оплате
+    await process_payment(update, context)
+    return PAYMENT
+
+
+async def process_payment(update, context):
+    """Обработка оплаты - YOOKASSA ИНТЕГРАЦИЯ"""
+    
+    # Получаем данные
+    name = context.user_data['name']
+    age = context.user_data['age']
+    gender = context.user_data['gender']
+    theme = context.user_data['theme']
+    user_id = update.effective_user.id
+    
+    # Создаём заказ в БД
+    order_id = db.create_order(
+        user_id=user_id,
+        theme=theme,
+        child_name=name,
+        child_age=age,
+        gender=gender,
+        photo_description=context.user_data.get('photo_description')
+    )
+    context.user_data['order_id'] = order_id
+    
+    # Обновляем статистику
+    db.update_daily_stats(total_orders=1)
+    
+    if not PAYMENT_ENABLED:
+        # Тестовый режим - генерируем сразу
+        if update.message:
+            await update.message.reply_text(
+                "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
+                "Оплата отключена. Генерирую книгу бесплатно...",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.callback_query.message.reply_text(
+                "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
+                "Оплата отключена. Генерирую книгу бесплатно...",
+                parse_mode='Markdown'
+            )
+        
+        await start_generation(update, context)
+        return ConversationHandler.END
+    
+    # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
+    payment_data = create_payment(
+        amount=BOOK_PRICE,
+        description=f"Персональная сказка про {name}",
+        return_url=f"https://t.me/{BOT_USERNAME}",
+        customer_email="noreply@storybook.ru"  # Фиктивный email для чека
+    )
+    
+    if not payment_data:
+        # Ошибка создания платежа
+        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Ошибка создания платежа. Попробуйте позже или напишите @your_support"
+        )
+        return ConversationHandler.END
+    
+    # Сохраняем платёж в БД
+    db.create_payment(
+        payment_id=payment_data['id'],
+        order_id=order_id,
+        user_id=user_id,
+        amount=BOOK_PRICE,
+        payment_url=payment_data['confirmation_url']
+    )
+    
+    context.user_data['payment_id'] = payment_data['id']
+    
+    # ОТПРАВЛЯЕМ КНОПКУ ОПЛАТЫ
+    keyboard = [[InlineKeyboardButton(
+        f"💳 Оплатить {BOOK_PRICE}₽", 
+        url=payment_data['confirmation_url']
+    )]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+    
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"💰 *Стоимость: {BOOK_PRICE}₽*\n\n"
+            f"📖 Сказка про {name}\n"
+            f"🎨 10 страниц с иллюстрациями Disney/Pixar качества\n"
+            f"📄 PDF файл для печати\n\n"
+            f"После оплаты книга будет готова через 5 минут!"
+        ),
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    # Ждём оплату
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "⏳ Ожидаю оплату...\n\n"
+            "После оплаты нажмите /check чтобы проверить статус.\n"
+            "Или просто подождите - я проверю автоматически!"
+        )
+    )
+    
+    # Запускаем автопроверку оплаты (каждые 10 секунд, макс 10 минут)
+    context.job_queue.run_repeating(
+        check_payment_status,
+        interval=10,
+        first=10,
+        data={
+            'payment_id': payment_data['id'],
+            'chat_id': user_id,
+            'user_data': context.user_data.copy()
+        },
+        name=f"payment_{payment_data['id']}"
+    )
+    
+    return PAYMENT
+
+
+async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
+    """Автоматическая проверка статуса платежа"""
+    job = context.job
+    payment_id = job.data['payment_id']
+    chat_id = job.data['chat_id']
+    user_data = job.data['user_data']
+    
+    # Проверяем статус
+    if is_payment_successful(payment_id):
+        # Оплата прошла!
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ *Оплата получена!*\n\nЗапускаю генерацию книги...",
+            parse_mode='Markdown'
+        )
+        
+        # Обновляем статусы в БД
+        db.update_payment_status(payment_id, 'succeeded')
+        db.update_order_status(user_data['order_id'], 'paid')
+        db.update_daily_stats(revenue=BOOK_PRICE)
+        
+        # Останавливаем проверку
+        job.schedule_removal()
+        
+        # Запускаем генерацию
+        # Создаём временный объект для передачи в start_generation
+        class TempUpdate:
+            def __init__(self, chat_id):
+                self.effective_user = type('obj', (object,), {'id': chat_id})
+                self.callback_query = None
+                self.message = type('obj', (object,), {'chat_id': chat_id})
+        
+        class TempContext:
+            def __init__(self, bot, user_data):
+                self.bot = bot
+                self.user_data = user_data
+        
+        temp_update = TempUpdate(chat_id)
+        temp_context = TempContext(context.bot, user_data)
+        
+        await start_generation(temp_update, temp_context)
+
+
+async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запускает генерацию книги"""
+    
+    # Получаем данные
+    name = context.user_data['name']
+    age = context.user_data['age']
+    gender = context.user_data['gender']
+    theme = context.user_data['theme']
+    photo_path = context.user_data.get('photo_path')
+    order_id = context.user_data.get('order_id')
+    
+    # Склоняем имя
+    name_accusative = decline_name_accusative(name, gender)
+    
+    # Загружаем название темы
+    with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
+        themes = json.load(f)
+    theme_name = themes[theme]["name"]
+    
+    # Определяем chat_id
+    if hasattr(update, 'callback_query') and update.callback_query:
+        chat_id = update.callback_query.message.chat_id
+    elif hasattr(update, 'message') and update.message:
+        chat_id = update.message.chat_id
+    else:
+        chat_id = update.effective_user.id
+    
+    status_message = await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"⏳ *Создаю сказку про {name_accusative}...*\n\n"
+             f"📖 Тема: {theme_name}\n"
+             f"✅ Выбрана история\n"
+             f"🎨 Рисую 10 иллюстраций...\n"
+             f"📄 Соберу PDF книгу\n\n"
+             f"_Это займёт примерно 5 минут_",
+        parse_mode='Markdown'
+    )
+    
+    try:
+        # ГЕНЕРИРУЕМ КНИГУ
+        pdf_path = create_storybook_v2(
+            child_name=name,
+            child_age=age,
+            gender=gender,
+            theme_id=theme,
+            photo_path=photo_path
+        )
+        
+        # Обновляем заказ в БД
+        if order_id:
+            db.update_order_status(order_id, 'completed', pdf_path)
+            db.update_daily_stats(completed_orders=1)
+        
+        # Удаляем статусное сообщение
+        await status_message.delete()
+        
+        # Отправляем PDF
+        with open(pdf_path, 'rb') as pdf_file:
+            await context.bot.send_document(
+                chat_id=chat_id,
+                document=pdf_file,
+                filename=f"{name}_сказка.pdf",
+                caption=f"🎉 *Ваша сказка готова!*\n\n"
+                        f"📖 \"{name} - {theme_name}\"\n\n"
+                        f"Расскажите друзьям! 🎁",
+                parse_mode='Markdown'
+            )
+        
+        # Удаляем временное фото если было
+        if photo_path and os.path.exists(photo_path):
+            os.remove(photo_path)
+        
+    except Exception as e:
+        await status_message.delete()
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Произошла ошибка при создании книги:\n\n`{str(e)}`\n\n"
+                 "Попробуйте ещё раз или обратитесь в поддержку.",
+            parse_mode='Markdown'
+        )
+
+
+async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Проверка статуса оплаты вручную - команда /check"""
+    
+    payment_id = context.user_data.get('payment_id')
+    
+    if not payment_id:
+        await update.message.reply_text("❌ Нет активного платежа")
+        return
+    
+    if is_payment_successful(payment_id):
+        await update.message.reply_text(
+            "✅ Оплата получена! Запускаю генерацию..."
+        )
+        
+        # Обновляем БД
+        order_id = context.user_data.get('order_id')
+        if order_id:
+            db.update_payment_status(payment_id, 'succeeded')
+            db.update_order_status(order_id, 'paid')
+            db.update_daily_stats(revenue=BOOK_PRICE)
+        
+        await start_generation(update, context)
+    else:
+        await update.message.reply_text(
+            "⏳ Платёж ещё не оплачен.\n\n"
+            "Пожалуйста, завершите оплату по ссылке выше."
+        )
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика бота - только для админа"""
+    user_id = update.effective_user.id
+    
+    # Проверка на админа
+    if ADMIN_ID and user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return
+    
+    # Получаем статистику
+    stats = db.get_total_stats()
+    stats_7d = db.get_stats(days=7)
+    
+    text = (
+        "📊 *Статистика бота:*\n\n"
+        f"👥 Всего пользователей: {stats['total_users']}\n"
+        f"📦 Всего заказов: {stats['total_orders']}\n"
+        f"✅ Завершённых: {stats['completed_orders']}\n"
+        f"💰 Выручка: {stats['revenue']}₽\n"
+        f"📈 Конверсия: {stats['conversion']:.1f}%\n\n"
+        "*Последние 7 дней:*\n"
+    )
+    
+    for day in stats_7d:
+        text += (
+            f"\n{day['date']}:\n"
+            f"  Новых: {day['new_users']} | "
+            f"Заказов: {day['total_orders']} | "
+            f"Выручка: {day['revenue']}₽"
+        )
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена разговора"""
+    await update.message.reply_text(
+        "Операция отменена. Напишите /start чтобы начать заново."
     )
     return ConversationHandler.END
 
+
 # ✅ ПАТЧ СТАБИЛЬНОСТИ: Глобальный обработчик ошибок
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Глобальный обработчик ошибок
-    Предотвращает падение бота при сетевых ошибках и высоких нагрузках
-    """
+    """Предотвращает падение бота при сетевых ошибках"""
     logger.error(f"Exception while handling an update: {context.error}")
-    
-    # Логируем полный traceback для debugging
     logger.error("".join(traceback.format_exception(None, context.error, context.error.__traceback__)))
     
-    # Если есть сообщение от пользователя - отвечаем
     if update and update.effective_message:
         try:
             await update.effective_message.reply_text(
@@ -401,80 +996,90 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             logger.error(f"Could not send error message to user: {e}")
-    
-    # НЕ падаем - просто логируем и продолжаем работу
     return
 
-# Главная функция
+
 def main():
     """Запуск бота"""
-    logger.info("🔧 Инициализация бота...")
     
-    # Проверяем обязательные переменные окружения
-    if not BOT_TOKEN:
-        logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не установлен!")
-        logger.error("   Установите переменную окружения BOT_TOKEN в Railway")
-        return
+    print("🤖 Запускаю Telegram бота...")
+    print(f"💳 Оплата: {'✅ ВКЛЮЧЕНА' if PAYMENT_ENABLED else '⚠️ ВЫКЛЮЧЕНА'}")
     
-    if not YOOKASSA_SECRET_KEY:
-        logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: YOOKASSA_SECRET_KEY не установлен!")
-        logger.error("   Установите переменную окружения YOOKASSA_SECRET_KEY в Railway")
-        return
+    # Получаем настройки для webhook
+    PORT = int(os.environ.get('PORT', '8080'))
+    USE_WEBHOOK = os.environ.get('USE_WEBHOOK', 'false').lower() == 'true'
+    RAILWAY_DOMAIN = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
     
-    if not ANTHROPIC_API_KEY:
-        logger.warning("⚠️ ВНИМАНИЕ: ANTHROPIC_API_KEY не установлен!")
-        logger.warning("   Генерация историй не будет работать")
+    WEBHOOK_URL = ""
+    if USE_WEBHOOK and RAILWAY_DOMAIN:
+        WEBHOOK_URL = f"https://{RAILWAY_DOMAIN}"
     
-    if not REPLICATE_API_TOKEN:
-        logger.warning("⚠️ ВНИМАНИЕ: REPLICATE_API_TOKEN не установлен!")
-        logger.warning("   Генерация иллюстраций не будет работать")
+    print(f"🌐 Webhook режим: {'ВКЛЮЧЕН' if USE_WEBHOOK else 'ВЫКЛЮЧЕН'}")
+    if WEBHOOK_URL:
+        print(f"🔗 Webhook URL: {WEBHOOK_URL}")
+    print(f"🔌 PORT: {PORT}")
     
-    # Инициализация БД
-    init_db()
-    logger.info("✅ База данных инициализирована")
-    
-    # ✅ ПАТЧ СТАБИЛЬНОСТИ: Настраиваем увеличенные таймауты для высоких нагрузок
-    logger.info("🔧 Настройка увеличенных таймаутов для высоких нагрузок...")
+    # Увеличиваем таймауты
+    # ✅ ПАТЧ СТАБИЛЬНОСТИ: Улучшенные таймауты
     request = HTTPXRequest(
-        connection_pool_size=30,     # Больше одновременных соединений (было 8)
-        read_timeout=30.0,           # Увеличено с 5 до 30 секунд
-        write_timeout=30.0,          # Увеличено с 5 до 30 секунд
-        connect_timeout=15.0,        # Увеличено с 5 до 15 секунд
-        pool_timeout=15.0            # Таймаут для получения соединения из пула
+        connection_pool_size=30,     # Больше одновременных соединений
+        connect_timeout=15.0,        # Таймаут подключения
+        read_timeout=30.0,           # Таймаут чтения
+        write_timeout=30.0,          # Таймаут записи
+        pool_timeout=15.0            # Таймаут получения соединения
     )
     
-    # Создаём приложение с кастомными настройками
-    logger.info("🔧 Создание приложения с патчем стабильности...")
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .request(request)
-        .build()
-    )
+    application = Application.builder().token(BOT_TOKEN).request(request).build()
     
-    # Conversation handler для создания книги
+    # Handler для сообщений в поддержку (ПЕРВЫМ! group=-1)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message), group=-1)
+    
     conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(create_storybook_start, pattern='^create_storybook$')],
+        entry_points=[
+            CommandHandler('start', start),
+            CallbackQueryHandler(create_story_callback, pattern='^create_story$')
+        ],
         states={
-            WAITING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
-            WAITING_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_age)],
-            WAITING_THEME: [CallbackQueryHandler(receive_theme, pattern='^theme_')],
-            WAITING_PHOTO: [MessageHandler(filters.PHOTO, receive_photo)]
+            CHOOSING_THEME: [
+                CallbackQueryHandler(theme_chosen, pattern='^theme_')
+            ],
+            CHOOSING_GENDER: [
+                CallbackQueryHandler(gender_chosen, pattern='^gender_')
+            ],
+            GETTING_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, name_received)
+            ],
+            GETTING_AGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, age_received)
+            ],
+            GETTING_PHOTO: [
+                CallbackQueryHandler(want_photo_callback, pattern='^want_photo$'),
+                CallbackQueryHandler(skip_photo_callback, pattern='^skip_photo$'),
+                MessageHandler(filters.PHOTO, photo_received)
+            ],
+            PAYMENT: []
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
     
-    # Регистрация обработчиков
-    logger.info("🔧 Регистрация обработчиков...")
-    application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
-    application.add_handler(CallbackQueryHandler(about, pattern='^about$'))
-    application.add_handler(CallbackQueryHandler(back_to_start, pattern='^back_to_start$'))
-    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    
+    # Handlers для примеров, инструкции и поддержки (вне conversation)
+    application.add_handler(CallbackQueryHandler(show_examples_callback, pattern='^show_examples$'))
+    application.add_handler(CallbackQueryHandler(how_it_works_callback, pattern='^how_it_works$'))
+    application.add_handler(CallbackQueryHandler(support_callback, pattern='^support$'))
+    application.add_handler(CallbackQueryHandler(cancel_support_callback, pattern='^cancel_support$'))
+    
+    # Handlers для кнопок админа в поддержке
+    application.add_handler(CallbackQueryHandler(admin_reply_callback, pattern='^admin_reply_'))
+    application.add_handler(CallbackQueryHandler(quick_reply_callback, pattern='^quick_'))
+    
+    # Команды
+    application.add_handler(CommandHandler('check', check_payment_command))
+    application.add_handler(CommandHandler('stats', stats_command))
+    application.add_handler(CommandHandler('reply', reply_command))  # Для админа
     
     # ✅ ПАТЧ СТАБИЛЬНОСТИ: Регистрируем глобальный обработчик ошибок
-    logger.info("🛡️ Регистрация глобального обработчика ошибок...")
     application.add_error_handler(error_handler)
     
     logger.info("=" * 60)
@@ -483,15 +1088,28 @@ def main():
     logger.info("✅ Error handler: включён")
     logger.info("✅ Таймауты: 30 сек (read/write), 15 сек (connect)")
     logger.info("✅ Connection pool: 30 соединений")
-    logger.info("✅ Drop pending updates: включено")
     logger.info("=" * 60)
     
-    # ✅ ПАТЧ СТАБИЛЬНОСТИ: Запускаем с параметрами для стабильности
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,  # Игнорируем старые сообщения после перезапуска
-        timeout=30                   # Увеличенный таймаут для long polling
-    )
+    print("✅ Бот с YooKassa и БД запущен!")
+    
+    # WEBHOOK режим (устраняет конфликты!)
+    if WEBHOOK_URL:
+        print("🔗 Запуск в WEBHOOK режиме (конфликтов НЕ БУДЕТ!)")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path="",
+            webhook_url=WEBHOOK_URL
+        )
+    else:
+        print("📡 Запуск в POLLING режиме")
+        # ✅ ПАТЧ СТАБИЛЬНОСТИ: Параметры для стабильности
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,  # Игнорируем старые сообщения
+            timeout=30                   # Увеличенный таймаут
+        )
+
 
 if __name__ == '__main__':
     main()
