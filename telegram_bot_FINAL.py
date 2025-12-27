@@ -34,8 +34,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Переменные окружения
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-YOOKASSA_TOKEN = os.getenv('YOOKASSA_TOKEN')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY')
+YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 REPLICATE_API_TOKEN = os.getenv('REPLICATE_API_TOKEN')
 
@@ -255,7 +256,7 @@ async def show_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title="Персонализированная детская книга",
         description=f"Книга для {child_name}, {child_age} лет\nТема: {theme}",
         payload=order_id,
-        provider_token=YOOKASSA_TOKEN,
+        provider_token=YOOKASSA_SECRET_KEY,
         currency='RUB',
         prices=[LabeledPrice("Книга", 44900)],  # в копейках
         start_parameter='create_storybook'
@@ -408,6 +409,25 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Запуск бота"""
     logger.info("🔧 Инициализация бота...")
+    
+    # Проверяем обязательные переменные окружения
+    if not BOT_TOKEN:
+        logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не установлен!")
+        logger.error("   Установите переменную окружения BOT_TOKEN в Railway")
+        return
+    
+    if not YOOKASSA_SECRET_KEY:
+        logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: YOOKASSA_SECRET_KEY не установлен!")
+        logger.error("   Установите переменную окружения YOOKASSA_SECRET_KEY в Railway")
+        return
+    
+    if not ANTHROPIC_API_KEY:
+        logger.warning("⚠️ ВНИМАНИЕ: ANTHROPIC_API_KEY не установлен!")
+        logger.warning("   Генерация историй не будет работать")
+    
+    if not REPLICATE_API_TOKEN:
+        logger.warning("⚠️ ВНИМАНИЕ: REPLICATE_API_TOKEN не установлен!")
+        logger.warning("   Генерация иллюстраций не будет работать")
     
     # Инициализация БД
     init_db()
