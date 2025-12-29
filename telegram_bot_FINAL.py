@@ -28,6 +28,28 @@ from generate_storybook_v2 import create_storybook_v2
 from payment import create_payment, is_payment_successful
 from database import db
 
+# 📊 АНАЛИТИКА: Счетчики событий
+analytics_cache = {
+    'start': 0,
+    'show_examples': 0, 
+    'how_it_works': 0,
+    'create_story': 0,
+    'theme_chosen': 0,
+    'gender_chosen': 0,
+    'name_entered': 0,
+    'age_entered': 0,
+    'photo_uploaded': 0,
+    'photo_skipped': 0,
+    'payment_created': 0,
+    'payment_completed': 0
+}
+
+def log_event(event_name, user_id=None):
+    """Логирование события для аналитики"""
+    analytics_cache[event_name] = analytics_cache.get(event_name, 0) + 1
+    logger.info(f"📊 ANALYTICS: {event_name} | user={user_id}")
+
+
 # НАСТРОЙКИ
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "Sefirum_storybook_bot")  # Username бота без @
@@ -74,6 +96,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Регистрируем пользователя в БД
     user = update.effective_user
     db.add_user(user.id, user.username, user.first_name, user.last_name)
+    log_event('start', user.id)
     
     # Кнопки - ПО ОДНОЙ В РЯД!
     keyboard = [
@@ -127,6 +150,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def show_examples_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('show_examples', update.effective_user.id)
     """Показываем примеры работ - КНОПКИ СО ССЫЛКАМИ!"""
     query = update.callback_query
     await query.answer()
@@ -155,6 +179,7 @@ async def show_examples_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('how_it_works', update.effective_user.id)
     """Показываем как работает бот"""
     query = update.callback_query
     await query.answer()
@@ -646,6 +671,7 @@ async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(photo_path)
     
     context.user_data['photo_path'] = photo_path
+    log_event('photo_uploaded', update.effective_user.id)
     
     # Переходим к оплате
     await process_payment(update, context)
@@ -656,6 +682,7 @@ async def skip_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Пользователь пропустил фото"""
     query = update.callback_query
     await query.answer()
+    log_event('photo_skipped', update.effective_user.id)
     
     context.user_data['photo_path'] = None
     
@@ -745,6 +772,7 @@ async def process_payment(update, context):
     )
     
     context.user_data['payment_id'] = payment_data['id']
+    log_event('payment_created', user_id)
     
     # ОТПРАВЛЯЕМ КНОПКУ ОПЛАТЫ
     keyboard = [[InlineKeyboardButton(
@@ -990,6 +1018,105 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+
+async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать аналитику (только для админа)"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ Эта команда только для администратора")
+        return
+    
+    try:
+        import sqlite3
+        
+        # Подключаемся к БД
+        conn = sqlite3.connect('storybook_bot.db')
+        cursor = conn.cursor()
+        
+        # Статистика из БД
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders")
+        total_orders = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'paid'")
+        paid_orders = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+        pending_orders = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT SUM(amount) FROM orders WHERE status = 'paid'")
+        revenue = cursor.fetchone()[0] or 0
+        
+        conn.close()
+        
+        # Конверсии
+        conv_order = (total_orders / total_users * 100) if total_users > 0 else 0
+        conv_payment = (paid_orders / total_orders * 100) if total_orders > 0 else 0
+        
+        # Формируем текст
+        stats_text = f"""📊 *АНАЛИТИКА БОТА*
+
+👥 *База данных:*
+• Всего пользователей: {total_users}
+• Всего заказов: {total_orders}
+• Оплачено: {paid_orders}
+• Ожидают оплату: {pending_orders}
+• Доход: {revenue:,.0f}₽
+
+📈 *Конверсия:*
+• Пользователи → Заказы: {conv_order:.1f}%
+• Заказы → Оплата: {conv_payment:.1f}%
+
+🔥 *Текущая сессия:*
+• /start: {analytics_cache.get('start', 0)}
+• 📚 Примеры: {analytics_cache.get('show_examples', 0)}
+• ❓ Как работает: {analytics_cache.get('how_it_works', 0)}
+• ⭐ Начали создание: {analytics_cache.get('create_story', 0)}
+• 🎨 Выбрали тему: {analytics_cache.get('theme_chosen', 0)}
+• 👦👧 Выбрали пол: {analytics_cache.get('gender_chosen', 0)}
+• ✍️ Ввели имя: {analytics_cache.get('name_entered', 0)}
+• 🔢 Ввели возраст: {analytics_cache.get('age_entered', 0)}
+• 📸 Загрузили фото: {analytics_cache.get('photo_uploaded', 0)}
+• ⏭️ Пропустили фото: {analytics_cache.get('photo_skipped', 0)}
+• 💰 Создали платеж: {analytics_cache.get('payment_created', 0)}
+
+💡 *Воронка (текущая сессия):*
+"""
+        
+        # Воронка конверсии
+        funnel_start = analytics_cache.get('start', 0)
+        if funnel_start > 0:
+            stats_text += f"• {funnel_start} открыли бота (100%)\n"
+            
+            examples = analytics_cache.get('show_examples', 0)
+            if examples > 0:
+                stats_text += f"• {examples} посмотрели примеры ({examples/funnel_start*100:.0f}%)\n"
+            
+            create = analytics_cache.get('create_story', 0)
+            if create > 0:
+                stats_text += f"• {create} начали создание ({create/funnel_start*100:.0f}%)\n"
+            
+            payment = analytics_cache.get('payment_created', 0)
+            if payment > 0:
+                stats_text += f"• {payment} дошли до оплаты ({payment/funnel_start*100:.0f}%)\n"
+            
+            paid = paid_orders  # Из БД
+            if paid > 0:
+                stats_text += f"• {paid} оплатили ({paid/funnel_start*100:.0f}%)\n"
+        else:
+            stats_text += "• Нет данных в текущей сессии\n"
+        
+        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Ошибка в analytics_command: {e}")
+        logger.error(traceback.format_exc())
+        await update.message.reply_text(f"❌ Ошибка получения статистики: {e}")
+
+
 # ✅ ПАТЧ СТАБИЛЬНОСТИ: Глобальный обработчик ошибок
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Предотвращает падение бота при сетевых ошибках"""
@@ -1084,6 +1211,7 @@ def main():
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
     application.add_handler(CommandHandler('stats', stats_command))
+    application.add_handler(CommandHandler('analytics', analytics_command))
     application.add_handler(CommandHandler('reply', reply_command))  # Для админа
     
     # ✅ ПАТЧ СТАБИЛЬНОСТИ: Регистрируем глобальный обработчик ошибок
