@@ -63,7 +63,7 @@ PAYMENT_ENABLED = bool(YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
 # Цена
-BOOK_PRICE = 449  # рублей
+BOOK_PRICE = 299  # рублей
 
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
@@ -743,7 +743,7 @@ async def process_payment(update, context):
     if user_username and user_username.lower() == "dim4eg86":
         price = 5  # Тестовая цена для владельца
     else:
-        price = BOOK_PRICE  # Обычная цена 449₽
+        price = BOOK_PRICE  # Обычная цена 299₽
     
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
     payment_data = create_payment(
@@ -1019,6 +1019,22 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать свой user_id"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or "нет username"
+    first_name = update.effective_user.first_name or ""
+    
+    await update.message.reply_text(
+        f"👤 *Твои данные:*\n\n"
+        f"🆔 User ID: `{user_id}`\n"
+        f"📝 Username: @{username}\n"
+        f"👋 Имя: {first_name}",
+        parse_mode='Markdown'
+    )
+
+
 async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать аналитику (только для админа)"""
     user_id = update.effective_user.id
@@ -1028,11 +1044,8 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     try:
-        import sqlite3
-        
-        # Подключаемся к БД
-        conn = sqlite3.connect('storybook_bot.db')
-        cursor = conn.cursor()
+        # Используем существующее подключение PostgreSQL через db
+        cursor = db.conn.cursor()
         
         # Статистика из БД
         cursor.execute("SELECT COUNT(*) FROM users")
@@ -1048,9 +1061,10 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_orders = cursor.fetchone()[0]
         
         cursor.execute("SELECT SUM(amount) FROM orders WHERE status = 'paid'")
-        revenue = cursor.fetchone()[0] or 0
+        result = cursor.fetchone()
+        revenue = int(result[0]) if result and result[0] else 0
         
-        conn.close()
+        cursor.close()
         
         # Конверсии
         conv_order = (total_orders / total_users * 100) if total_users > 0 else 0
@@ -1211,6 +1225,7 @@ def main():
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
     application.add_handler(CommandHandler('stats', stats_command))
+    application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
     application.add_handler(CommandHandler('reply', reply_command))  # Для админа
     
