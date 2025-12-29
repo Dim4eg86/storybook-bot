@@ -1064,7 +1064,8 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
         pending_orders = cursor.fetchone()[0]
         
-        cursor.execute("SELECT SUM(amount) FROM orders WHERE status = 'paid'")
+        # Доход из таблицы payments (там хранится amount)
+        cursor.execute("SELECT SUM(p.amount) FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status = 'paid'")
         result = cursor.fetchone()
         revenue = int(result[0]) if result and result[0] else 0
         
