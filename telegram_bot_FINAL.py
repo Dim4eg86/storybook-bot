@@ -1044,8 +1044,12 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     try:
-        # Используем существующее подключение PostgreSQL через db
-        cursor = db.conn.cursor()
+        import psycopg2
+        import os
+        
+        # Подключаемся к PostgreSQL напрямую
+        conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+        cursor = conn.cursor()
         
         # Статистика из БД
         cursor.execute("SELECT COUNT(*) FROM users")
@@ -1065,6 +1069,7 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         revenue = int(result[0]) if result and result[0] else 0
         
         cursor.close()
+        conn.close()
         
         # Конверсии
         conv_order = (total_orders / total_users * 100) if total_users > 0 else 0
@@ -1072,6 +1077,63 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Формируем текст
         stats_text = f"""📊 *АНАЛИТИКА БОТА*
+
+👥 *База данных:*
+• Всего пользователей: {total_users}
+• Всего заказов: {total_orders}
+• Оплачено: {paid_orders}
+• Ожидают оплату: {pending_orders}
+• Доход: {revenue:,.0f}₽
+
+📈 *Конверсия:*
+• Пользователи → Заказы: {conv_order:.1f}%
+• Заказы → Оплата: {conv_payment:.1f}%
+
+🔥 *Текущая сессия:*
+• /start: {analytics_cache.get('start', 0)}
+• 📚 Примеры: {analytics_cache.get('show_examples', 0)}
+• ❓ Как работает: {analytics_cache.get('how_it_works', 0)}
+• ⭐ Начали создание: {analytics_cache.get('create_story', 0)}
+• 🎨 Выбрали тему: {analytics_cache.get('theme_chosen', 0)}
+• 👦👧 Выбрали пол: {analytics_cache.get('gender_chosen', 0)}
+• ✍️ Ввели имя: {analytics_cache.get('name_entered', 0)}
+• 🔢 Ввели возраст: {analytics_cache.get('age_entered', 0)}
+• 📸 Загрузили фото: {analytics_cache.get('photo_uploaded', 0)}
+• ⏭️ Пропустили фото: {analytics_cache.get('photo_skipped', 0)}
+• 💰 Создали платеж: {analytics_cache.get('payment_created', 0)}
+
+💡 *Воронка (текущая сессия):*
+"""
+        
+        # Воронка конверсии
+        funnel_start = analytics_cache.get('start', 0)
+        if funnel_start > 0:
+            stats_text += f"• {funnel_start} открыли бота (100%)\n"
+            
+            examples = analytics_cache.get('show_examples', 0)
+            if examples > 0:
+                stats_text += f"• {examples} посмотрели примеры ({examples/funnel_start*100:.0f}%)\n"
+            
+            create = analytics_cache.get('create_story', 0)
+            if create > 0:
+                stats_text += f"• {create} начали создание ({create/funnel_start*100:.0f}%)\n"
+            
+            payment = analytics_cache.get('payment_created', 0)
+            if payment > 0:
+                stats_text += f"• {payment} дошли до оплаты ({payment/funnel_start*100:.0f}%)\n"
+            
+            if paid_orders > 0:
+                stats_text += f"• {paid_orders} оплатили (всего)\n"
+        else:
+            stats_text += "• Нет данных в текущей сессии\n"
+        
+        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Ошибка в analytics_command: {e}")
+        logger.error(traceback.format_exc())
+        await update.message.reply_text(f"❌ Ошибка получения статистики: {e}")
+
 
 👥 *База данных:*
 • Всего пользователей: {total_users}
