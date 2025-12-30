@@ -157,8 +157,8 @@ async def show_examples_callback(update: Update, context: ContextTypes.DEFAULT_T
     
     # Кнопки с примерами
     keyboard = [
-        [InlineKeyboardButton("🦕 Саша с динозаврами", url="https://drive.google.com/file/d/1FIVkCSMI-mjhXX236O8FYhiHCJB4_N_C/preview")],
-        [InlineKeyboardButton("🧚 Юлиана в стране фей", url="https://drive.google.com/file/d/1CphV74SQA-s4q3NwsBQNW92gHla-DLLS/preview")],
+        [InlineKeyboardButton("🦕 Саша с динозаврами", url="https://drive.google.com/uc?export=view&id=1FIVkCSMI-mjhXX236O8FYhiHCJB4_N_C")],
+        [InlineKeyboardButton("🧚 Юлиана в стране фей", url="https://drive.google.com/uc?export=view&id=1CphV74SQA-s4q3NwsBQNW92gHla-DLLS")],
         [InlineKeyboardButton("⭐ Создать свою сказку", callback_data="create_story")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1064,8 +1064,8 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
         pending_orders = cursor.fetchone()[0]
         
-        # Доход из таблицы payments (там хранится amount)
-        cursor.execute("SELECT SUM(p.amount) FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status = 'paid'")
+        # Доход - сумма всех payments (туда попадают только созданные платежи)
+        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
         result = cursor.fetchone()
         revenue = int(result[0]) if result and result[0] else 0
         
