@@ -842,12 +842,12 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         db.update_payment_status(payment_id, 'succeeded')
         db.update_order_status(user_data['order_id'], 'paid')
         db.update_daily_stats(revenue=BOOK_PRICE)
-            
-            # Уведомляем админа о покупке
-            user_data = job.data.get('user_data', {})
-            user_name = user_data.get('name', 'Аноним')
-            user_id = chat_id
-            await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
+        
+        # Уведомляем админа о покупке
+        user_data = job.data.get('user_data', {})
+        user_name = user_data.get('name', 'Аноним')
+        user_id = chat_id
+        await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
         
         # Останавливаем проверку
         job.schedule_removal()
