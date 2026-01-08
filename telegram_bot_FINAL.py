@@ -842,6 +842,12 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         db.update_payment_status(payment_id, 'succeeded')
         db.update_order_status(user_data['order_id'], 'paid')
         db.update_daily_stats(revenue=BOOK_PRICE)
+            
+            # Уведомляем админа о покупке
+            user_data = job.data.get('user_data', {})
+            user_name = user_data.get('name', 'Аноним')
+            user_id = chat_id
+            await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
         
         # Останавливаем проверку
         job.schedule_removal()
@@ -967,6 +973,10 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
             db.update_payment_status(payment_id, 'succeeded')
             db.update_order_status(order_id, 'paid')
             db.update_daily_stats(revenue=BOOK_PRICE)
+            
+            # Уведомляем админа о покупке
+            user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
+            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE)
         
         await start_generation(update, context)
     else:
@@ -975,6 +985,29 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
             "Пожалуйста, завершите оплату по ссылке выше."
         )
 
+
+
+
+async def notify_admin_payment(context, user_id, user_name, order_id, amount):
+    """Отправить уведомление админу о новой покупке"""
+    if ADMIN_ID and ADMIN_ID > 0:
+        try:
+            notification_text = f"""🎉 *НОВАЯ ПОКУПКА!*
+
+👤 Покупатель: {user_name} (ID: {user_id})
+📝 Заказ: #{order_id}
+💰 Сумма: {amount}₽
+
+🎨 Генерация началась автоматически!"""
+            
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=notification_text,
+                parse_mode='Markdown'
+            )
+            logger.info(f"✅ Уведомление админу отправлено о заказе #{order_id}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления админу: {e}")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Статистика бота - только для админа"""
