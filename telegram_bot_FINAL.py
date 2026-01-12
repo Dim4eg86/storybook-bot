@@ -824,19 +824,22 @@ async def process_payment(update, context):
 
 async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
     """Автоматическая проверка статуса платежа"""
+    from telegram.error import Forbidden
+    
     job = context.job
     payment_id = job.data['payment_id']
     chat_id = job.data['chat_id']
     user_data = job.data['user_data']
     
-    # Проверяем статус
-    if is_payment_successful(payment_id):
-        # Оплата прошла!
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ *Оплата получена!*\n\nЗапускаю генерацию книги...",
-            parse_mode='Markdown'
-        )
+    try:
+        # Проверяем статус
+        if is_payment_successful(payment_id):
+            # Оплата прошла!
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="✅ *Оплата получена!*\n\nЗапускаю генерацию книги...",
+                parse_mode='Markdown'
+            )
         
         # Обновляем статусы в БД
         db.update_payment_status(payment_id, 'succeeded')
@@ -869,6 +872,14 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         temp_context = TempContext(context.bot, user_data)
         
         await start_generation(temp_update, temp_context)
+    
+    except Forbidden:
+        # Пользователь заблокировал бота - останавливаем проверку
+        logger.info(f"Пользователь {chat_id} заблокировал бота. Останавливаем проверку оплаты {payment_id}")
+        job.schedule_removal()
+    except Exception as e:
+        # Другие ошибки - логируем
+        logger.error(f"Ошибка проверки оплаты {payment_id}: {e}")
 
 
 async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
