@@ -156,10 +156,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Формируем текст с ценой
     if user_price == 0:
         price_text = "🎁 *БЕСПЛАТНО для вас!*"
-    elif user_price < BOOK_PRICE:
-        price_text = f"👑 *VIP цена: {user_price}₽* (обычная {BOOK_PRICE}₽)"
+    elif user_price < PRICE_STANDARD:
+        price_text = f"👑 *VIP цена: {user_price}₽* (обычные цены: {PRICE_STANDARD}₽/{PRICE_PREMIUM}₽)"
     else:
-        price_text = f"💰 Цена: {user_price}₽"
+        price_text = f"💰 Цена: от {PRICE_STANDARD}₽"
     
     # Отправляем welcome картинку С КНОПКАМИ
     welcome_path = 'welcome.jpg'
@@ -244,10 +244,10 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
     # Формируем текст с ценой
     if user_price == 0:
         price_text = "🎁 *БЕСПЛАТНО для вас!*"
-    elif user_price < BOOK_PRICE:
-        price_text = f"👑 *Ваша VIP цена: {user_price}₽* (обычная {BOOK_PRICE}₽)"
+    elif user_price < PRICE_STANDARD:
+        price_text = f"👑 *Ваша VIP цена: {user_price}₽* (обычные: {PRICE_STANDARD}₽/{PRICE_PREMIUM}₽)"
     else:
-        price_text = f"Цена: {user_price}₽"
+        price_text = f"От {PRICE_STANDARD}₽"
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
@@ -984,6 +984,7 @@ async def process_payment(update, context):
         data={
             'payment_id': payment_data['id'],
             'chat_id': user_id,
+            'price': price,  # ✅ Добавляем сумму оплаты
             'user_data': context.user_data.copy()
         },
         name=f"payment_{payment_data['id']}"
@@ -1014,14 +1015,17 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         # Обновляем статусы в БД
         db.update_payment_status(payment_id, 'succeeded')
         db.update_order_status(user_data['order_id'], 'paid')
-        db.update_daily_stats(revenue=BOOK_PRICE)
+        
+        # ✅ Получаем реальную сумму оплаты
+        payment_amount = job.data.get('price', PRICE_STANDARD)
+        db.update_daily_stats(revenue=payment_amount)
         
         # Уведомляем админа о покупке
         user_data = job.data.get('user_data', {})
         user_name = user_data.get('name', 'Аноним')
         user_id = chat_id
         order_id = user_data.get('order_id')
-        await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
+        await notify_admin_payment(context, user_id, user_name, order_id, payment_amount)
         
         # Останавливаем проверку
         job.schedule_removal()
@@ -1174,11 +1178,15 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
         if order_id:
             db.update_payment_status(payment_id, 'succeeded')
             db.update_order_status(order_id, 'paid')
-            db.update_daily_stats(revenue=BOOK_PRICE)
+            
+            # ✅ Получаем сумму из тарифа пользователя
+            plan = context.user_data.get('plan', 'standard')
+            payment_amount = get_user_price(update.effective_user.id, plan)
+            db.update_daily_stats(revenue=payment_amount)
             
             # Уведомляем админа о покупке
             user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
-            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE)
+            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, payment_amount)
         
         await start_generation(update, context)
     else:
