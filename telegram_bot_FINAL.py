@@ -65,6 +65,12 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 # Цена
 BOOK_PRICE = 299  # рублей
 
+# 👑 VIP ЦЕНЫ (персональные скидки)
+# Формат: {user_id: цена_в_рублях}
+VIP_PRICES = {
+    610820340: 5,   # Дима (владелец) - 5₽ за сказку
+}
+
 # 🎁 БЕСПЛАТНЫЕ КРЕДИТЫ ДЛЯ КОМПЕНСАЦИИ
 # Формат: {user_id: количество_бесплатных_книг}
 FREE_CREDITS = {
@@ -75,6 +81,23 @@ FREE_CREDITS = {
 
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
+
+
+def get_user_price(user_id):
+    """
+    Возвращает цену для конкретного пользователя
+    Проверяет VIP-скидки и FREE_CREDITS
+    """
+    # Если есть бесплатный кредит - цена 0
+    if user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
+        return 0
+    
+    # Если есть VIP цена - возвращаем её
+    if user_id in VIP_PRICES:
+        return VIP_PRICES[user_id]
+    
+    # Иначе обычная цена
+    return BOOK_PRICE
 
 
 def decline_name_accusative(name, gender):
@@ -106,6 +129,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.add_user(user.id, user.username, user.first_name, user.last_name)
     log_event('start', user.id)
     
+    # Получаем персональную цену для пользователя
+    user_price = get_user_price(user.id)
+    
     # Кнопки - ПО ОДНОЙ В РЯД!
     keyboard = [
         [InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")],
@@ -114,6 +140,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📞 Поддержка", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Формируем текст с ценой
+    if user_price == 0:
+        price_text = "🎁 *БЕСПЛАТНО для вас!*"
+    elif user_price < BOOK_PRICE:
+        price_text = f"👑 *VIP цена: {user_price}₽* (обычная {BOOK_PRICE}₽)"
+    else:
+        price_text = f"💰 Цена: {user_price}₽"
     
     # Отправляем welcome картинку С КНОПКАМИ
     welcome_path = 'welcome.jpg'
@@ -131,7 +165,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "• Персонаж похож на вашего ребёнка\n"
                     "• Профессиональное качество\n"
                     "• PDF файл для печати\n\n"
-                    f"💰 Цена: {BOOK_PRICE}₽\n"
+                    f"{price_text}\n"
                     "⏱️ Готово за 5 минут\n\n"
                     "*Выберите действие:*"
                 ),
@@ -150,7 +184,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Персонаж похож на вашего ребёнка\n"
             "• Профессиональное качество\n"
             "• PDF файл для печати\n\n"
-            f"💰 Цена: {BOOK_PRICE}₽\n"
+            f"{price_text}\n"
             "⏱️ Готово за 5 минут\n\n"
             "*Выберите действие:*",
             parse_mode='Markdown',
@@ -192,6 +226,17 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
+    # Получаем персональную цену для пользователя
+    user_price = get_user_price(update.effective_user.id)
+    
+    # Формируем текст с ценой
+    if user_price == 0:
+        price_text = "🎁 *БЕСПЛАТНО для вас!*"
+    elif user_price < BOOK_PRICE:
+        price_text = f"👑 *Ваша VIP цена: {user_price}₽* (обычная {BOOK_PRICE}₽)"
+    else:
+        price_text = f"Цена: {user_price}₽"
+    
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=(
@@ -220,7 +265,7 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
             "• Особенности (веснушки, очки)\n"
             "Можно пропустить — создам типичного персонажа.\n\n"
             "*Шаг 6. Оплатите* 💳\n"
-            f"Цена: {BOOK_PRICE}₽\n\n"
+            f"{price_text}\n\n"
             "*Шаг 7. Получите книгу!* 📖\n"
             "⏱️ Готово за 5 минут\n"
             "• 10 страниц с иллюстрациями\n"
@@ -781,10 +826,10 @@ async def process_payment(update, context):
         await start_generation(update, context)
         return ConversationHandler.END
     
-    # 💰 СПЕЦИАЛЬНАЯ ЦЕНА ДЛЯ ВЛАДЕЛЬЦА
-    user_username = update.effective_user.username
-    if user_username and user_username.lower() == "dim4eg86":
-        price = 5  # Тестовая цена для владельца
+    # 💰 ОПРЕДЕЛЕНИЕ ЦЕНЫ (проверяем VIP скидки)
+    if user_id in VIP_PRICES:
+        price = VIP_PRICES[user_id]  # Персональная VIP цена
+        logger.info(f"👑 VIP цена для {user_id}: {price}₽")
     else:
         price = BOOK_PRICE  # Обычная цена 299₽
     
