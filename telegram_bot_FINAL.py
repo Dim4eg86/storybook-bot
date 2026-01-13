@@ -62,13 +62,14 @@ PAYMENT_ENABLED = bool(YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY)
 # Админ для статистики
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
-# Цена
-BOOK_PRICE = 299  # рублей
+# 💰 ЦЕНЫ НА ТАРИФЫ
+PRICE_STANDARD = 290   # Сказка (обычный Flux)
+PRICE_PREMIUM = 390    # Сказка-двойник (PuLID с фото)
 
 # 👑 VIP ЦЕНЫ (персональные скидки)
-# Формат: {user_id: цена_в_рублях}
+# Формат: {user_id: {'standard': цена_стандарт, 'premium': цена_премиум}}
 VIP_PRICES = {
-    610820340: 5,   # Дима (владелец) - 5₽ за сказку
+    610820340: {'standard': 5, 'premium': 5},   # Дима (владелец) - 5₽ за любую сказку
 }
 
 # 🎁 БЕСПЛАТНЫЕ КРЕДИТЫ ДЛЯ КОМПЕНСАЦИИ
@@ -80,13 +81,19 @@ FREE_CREDITS = {
 }
 
 # Состояния разговора
-CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
+CHOOSING_THEME, CHOOSING_PLAN, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(7)
 
 
-def get_user_price(user_id):
+def get_user_price(user_id, plan='standard'):
     """
-    Возвращает цену для конкретного пользователя
-    Проверяет VIP-скидки и FREE_CREDITS
+    Возвращает цену для конкретного пользователя и тарифа
+    
+    Args:
+        user_id: ID пользователя
+        plan: 'standard' или 'premium'
+    
+    Returns:
+        int: Цена в рублях
     """
     # Если есть бесплатный кредит - цена 0
     if user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
@@ -94,10 +101,15 @@ def get_user_price(user_id):
     
     # Если есть VIP цена - возвращаем её
     if user_id in VIP_PRICES:
-        return VIP_PRICES[user_id]
+        vip_prices = VIP_PRICES[user_id]
+        if isinstance(vip_prices, dict):
+            return vip_prices.get(plan, PRICE_STANDARD if plan == 'standard' else PRICE_PREMIUM)
+        else:
+            # Старый формат (одна цена на всё)
+            return vip_prices
     
-    # Иначе обычная цена
-    return BOOK_PRICE
+    # Иначе обычная цена по тарифу
+    return PRICE_STANDARD if plan == 'standard' else PRICE_PREMIUM
 
 
 def decline_name_accusative(name, gender):
@@ -586,7 +598,7 @@ async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Тема выбрана, спрашиваем пол"""
+    """Тема выбрана, предлагаем выбор тарифа"""
     query = update.callback_query
     await query.answer()
     
@@ -598,6 +610,59 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         themes = json.load(f)
     theme_name = themes[theme_id]["name"]
     
+    log_event('theme_chosen', update.effective_user.id)
+    
+    # Получаем цены для этого пользователя
+    user_id = update.effective_user.id
+    price_standard = get_user_price(user_id, 'standard')
+    price_premium = get_user_price(user_id, 'premium')
+    
+    # Формируем кнопки выбора тарифа
+    keyboard = [
+        [InlineKeyboardButton(
+            f"📚 Сказка - {price_standard}₽",
+            callback_data="plan_standard"
+        )],
+        [InlineKeyboardButton(
+            f"🎭 Сказка-двойник - {price_premium}₽ 🔥",
+            callback_data="plan_premium"
+        )]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            f"✅ *Тема:* {theme_name}\n\n"
+            "💎 *Выберите тип персонализации:*\n\n"
+            f"📚 *Сказка* — {price_standard}₽\n"
+            "Стилизованный персонаж\n"
+            "• Учитываем цвет волос, глаз\n"
+            "• Красивый Disney/Pixar стиль\n\n"
+            f"🎭 *Сказка-двойник* — {price_premium}₽ 🔥\n"
+            "*Персонаж КАК ЖИВОЙ* — похож на ребёнка!\n"
+            "• 🎯 AI анализ лица с фото\n"
+            "• 📸 Максимальная похожесть\n"
+            "• ✨ \"Мама, это же я!\"\n"
+            "• 👑 Самое популярное!"
+        ),
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    return CHOOSING_PLAN
+
+
+async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тариф выбран, спрашиваем пол"""
+    query = update.callback_query
+    await query.answer()
+    
+    plan = query.data.replace("plan_", "")  # 'standard' или 'premium'
+    context.user_data['plan'] = plan
+    
+    plan_name = "Сказка" if plan == "standard" else "Сказка-двойник"
+    
     keyboard = [
         [InlineKeyboardButton("👦 Мальчик", callback_data="gender_boy")],
         [InlineKeyboardButton("👧 Девочка", callback_data="gender_girl")]
@@ -606,7 +671,7 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text=f"✅ Тема: {theme_name}\n\n👶 Кто будет главным героем?",
+        text=f"✅ Тариф: {plan_name}\n\n👶 Кто будет главным героем?",
         reply_markup=reply_markup
     )
     
@@ -674,23 +739,40 @@ async def age_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     context.user_data['age'] = age
     
-    # Переходим к фото
-    keyboard = [
-        [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_photo")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Проверяем выбранный тариф
+    plan = context.user_data.get('plan', 'standard')
     
-    await update.message.reply_text(
-        f"📸 *Хотите, чтобы герой был похож на вашего ребёнка?*\n\n"
-        f"Загрузите фото, и я проанализирую внешность:\n"
-        f"• Цвет волос\n"
-        f"• Цвет глаз\n"
-        f"• Особенности (веснушки, очки)\n\n"
-        f"Или пропустите — создам типичного персонажа.",
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
+    if plan == 'premium':
+        # Для премиум тарифа фото ОБЯЗАТЕЛЬНО
+        await update.message.reply_text(
+            f"📸 *Загрузите фото ребёнка*\n\n"
+            f"Для тарифа \"Сказка-двойник\" фото необходимо,\n"
+            f"чтобы персонаж был максимально похож!\n\n"
+            f"💡 *Для лучшего результата:*\n"
+            f"• Фото анфас (лицом к камере)\n"
+            f"• Хорошее освещение\n"
+            f"• Ребёнок один на фото\n"
+            f"• Лицо хорошо видно",
+            parse_mode='Markdown'
+        )
+    else:
+        # Для стандартного тарифа фото опционально
+        keyboard = [
+            [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_photo")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"📸 *Хотите, чтобы герой был похож на вашего ребёнка?*\n\n"
+            f"Загрузите фото, и я проанализирую внешность:\n"
+            f"• Цвет волос\n"
+            f"• Цвет глаз\n"
+            f"• Особенности (веснушки, очки)\n\n"
+            f"Или пропустите — создам типичного персонажа.",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
     
     return GETTING_PHOTO
 
@@ -826,17 +908,17 @@ async def process_payment(update, context):
         await start_generation(update, context)
         return ConversationHandler.END
     
-    # 💰 ОПРЕДЕЛЕНИЕ ЦЕНЫ (проверяем VIP скидки)
-    if user_id in VIP_PRICES:
-        price = VIP_PRICES[user_id]  # Персональная VIP цена
-        logger.info(f"👑 VIP цена для {user_id}: {price}₽")
-    else:
-        price = BOOK_PRICE  # Обычная цена 299₽
+    # 💰 ОПРЕДЕЛЕНИЕ ЦЕНЫ по тарифу и VIP скидкам
+    plan = context.user_data.get('plan', 'standard')
+    price = get_user_price(user_id, plan)
+    
+    plan_name = "Сказка" if plan == "standard" else "Сказка-двойник"
+    logger.info(f"💰 Цена для {user_id}: {price}₽ (тариф: {plan})")
     
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
     payment_data = create_payment(
         amount=price,
-        description=f"Персональная сказка про {name}",
+        description=f"{plan_name} про {name}",
         return_url=f"https://t.me/{BOT_USERNAME}",
         customer_email="noreply@storybook.ru"  # Фиктивный email для чека
     )
@@ -979,6 +1061,7 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     age = context.user_data['age']
     gender = context.user_data['gender']
     theme = context.user_data['theme']
+    plan = context.user_data.get('plan', 'standard')  # ✅ НОВОЕ: получаем тариф
     photo_path = context.user_data.get('photo_path')
     order_id = context.user_data.get('order_id')
     
@@ -998,14 +1081,19 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         chat_id = update.effective_user.id
     
+    # ✅ НОВОЕ: разное сообщение для разных тарифов
+    plan_emoji = "🎭" if plan == "premium" else "📚"
+    plan_text = "Сказка-двойник" if plan == "premium" else "Сказка"
+    
     status_message = await context.bot.send_message(
         chat_id=chat_id,
-        text=f"⏳ *Создаю сказку про {name_accusative}...*\n\n"
+        text=f"⏳ *Создаю {plan_text} про {name_accusative}...*\n\n"
+             f"{plan_emoji} Тариф: {plan_text}\n"
              f"📖 Тема: {theme_name}\n"
              f"✅ Выбрана история\n"
              f"🎨 Рисую 10 иллюстраций...\n"
              f"📄 Соберу PDF книгу\n\n"
-             f"_Это займёт примерно 5 минут_",
+             f"_Это займёт примерно {'3-4 минуты' if plan == 'standard' else '4-5 минут'}_",
         parse_mode='Markdown'
     )
     
@@ -1016,7 +1104,8 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             child_age=age,
             gender=gender,
             theme_id=theme,
-            photo_path=photo_path
+            photo_path=photo_path,
+            plan=plan  # ✅ НОВОЕ: передаём тариф
         )
         
         # Обновляем заказ в БД
@@ -1027,15 +1116,28 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем статусное сообщение
         await status_message.delete()
         
+        # ✅ НОВОЕ: разные сообщения для разных тарифов
+        if plan == "premium":
+            caption_text = (
+                f"🎉 *Ваша Сказка-двойник готова!*\n\n"
+                f"🎭 Персонаж максимально похож на {name_accusative}!\n"
+                f"📖 \"{name} - {theme_name}\"\n\n"
+                f"Расскажите друзьям! 🎁"
+            )
+        else:
+            caption_text = (
+                f"🎉 *Ваша сказка готова!*\n\n"
+                f"📖 \"{name} - {theme_name}\"\n\n"
+                f"Расскажите друзьям! 🎁"
+            )
+        
         # Отправляем PDF
         with open(pdf_path, 'rb') as pdf_file:
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=pdf_file,
                 filename=f"{name}_сказка.pdf",
-                caption=f"🎉 *Ваша сказка готова!*\n\n"
-                        f"📖 \"{name} - {theme_name}\"\n\n"
-                        f"Расскажите друзьям! 🎁",
+                caption=caption_text,
                 parse_mode='Markdown'
             )
         
@@ -1329,6 +1431,9 @@ def main():
         states={
             CHOOSING_THEME: [
                 CallbackQueryHandler(theme_chosen, pattern='^theme_')
+            ],
+            CHOOSING_PLAN: [
+                CallbackQueryHandler(plan_chosen, pattern='^plan_')
             ],
             CHOOSING_GENDER: [
                 CallbackQueryHandler(gender_chosen, pattern='^gender_')
