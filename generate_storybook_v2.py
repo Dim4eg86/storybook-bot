@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Генератор персональных сказок - ГОРОД РОБОТОВ 
+Генератор персональных сказок - ГОРОД РОБОТОВ
 С анализом фото и подстановкой данных
 ✅ ИСПРАВЛЕНО: Вертикальный формат изображений 3:4 (768x1024)
 """
@@ -167,32 +167,18 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
     
     for attempt in range(max_retries):
         try:
-            if use_pulid and photo_path and os.path.exists(photo_path):
-                # ✅ ПРЕМИУМ: Используем PuLID для максимальной похожести
-                output = replicate.run(
-                    "zsxkib/pulid:8baa7ef2255075b46f4d91cd238c21d31181950b84ce3d1c6d653eb77c0bf68e",
-                    input={
-                        "main_face_image": open(photo_path, "rb"),
-                        "prompt": prompt + ", Pixar 3D animation style, Disney quality, professional children's book illustration",
-                        "negative_prompt": "realistic photo, adult face, ugly, distorted, deformed, bad quality, blurry, dark, scary, nsfw",
-                        "style_strength_ratio": 25,  # Похожесть на фото
-                        "id_weight": 1.0,            # Сила лица
-                        "num_steps": 20,
-                        "guidance_scale": 5,
-                        "num_outputs": 1,
-                        "output_format": "png"
-                    }
-                )
-            else:
-                # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
-                output = replicate.run(
-                    "black-forest-labs/flux-1.1-pro",
-                    input={
-                        "prompt": prompt,
-                        "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
-                        "num_outputs": 1,
-                        "output_format": "png",
-                        "output_quality": 100,
+            # ⚠️ ВРЕМЕННОЕ РЕШЕНИЕ: PuLID модель недоступна
+            # Используем обычный Flux Pro с детальным промптом из анализа фото
+            
+            # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
+            output = replicate.run(
+                "black-forest-labs/flux-1.1-pro",
+                input={
+                    "prompt": prompt,
+                    "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
+                    "num_outputs": 1,
+                    "output_format": "png",
+                    "output_quality": 100,
                         "safety_tolerance": 5,
                         "guidance": 3.5,
                         "num_inference_steps": 28
