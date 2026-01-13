@@ -168,15 +168,19 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
     for attempt in range(max_retries):
         try:
             if use_pulid and photo_path and os.path.exists(photo_path):
-                # ✅ ПРЕМИУМ: Используем face-to-many для 3D персонажа с лицом
-                print(f"   🎭 Используем face-to-many (премиум качество)...")
+                # ✅ ПРЕМИУМ: Используем InstantID для Pixar персонажа с лицом
+                print(f"   🎭 Используем InstantID (премиум Pixar качество)...")
                 output = replicate.run(
-                    "fofr/face-to-many",
+                    "zsxkib/instant-id",
                     input={
                         "image": open(photo_path, "rb"),
-                        "prompt": prompt,
-                        "style": "3D",  # 3D Pixar стиль
-                        "negative_prompt": "realistic photo, adult, ugly, distorted, bad quality, blurry"
+                        "prompt": prompt + ", Pixar 3D animation style, Disney character, vibrant colors, smooth rendering, professional children's book illustration",
+                        "negative_prompt": "realistic photo, adult, ugly, distorted, deformed, bad quality, blurry, dark, scary, nsfw, lowres",
+                        "width": 768,
+                        "height": 1024,
+                        "ip_adapter_scale": 0.8,  # Сила похожести лица
+                        "controlnet_conditioning_scale": 0.8,  # Сила контроля лица
+                        "num_inference_steps": 30
                     }
                 )
             else:
