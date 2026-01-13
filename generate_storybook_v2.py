@@ -60,12 +60,18 @@ def decline_name(name, case='accs'):
     # Если не получилось - возвращаем как есть
     return name
 
-def analyze_photo(photo_path):
+def analyze_photo(photo_path, premium=False):
     """
     Анализирует фото ребёнка через Claude
+    
+    Args:
+        photo_path: путь к фото
+        premium: если True - делает СУПЕР-детальный анализ
+    
     Возвращает: словарь с характеристиками
     """
-    print("📸 Анализирую фото ребёнка...")
+    analysis_type = "ПРЕМИУМ (супер-детальный)" if premium else "стандартный"
+    print(f"📸 Анализирую фото ребёнка ({analysis_type})...")
     
     # Читаем фото
     with open(photo_path, 'rb') as f:
@@ -88,9 +94,54 @@ def analyze_photo(photo_path):
     # Запрос к Claude
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
     
+    # Для премиума - СУПЕР-детальный промпт
+    if premium:
+        prompt_text = """Проанализируй фото ребёнка МАКСИМАЛЬНО ДЕТАЛЬНО для создания 3D Pixar персонажа с высокой похожестью.
+
+Ответь ТОЛЬКО в формате JSON (без markdown):
+{
+  "hair_color": "blonde/brown/red/dark/light brown",
+  "hair_color_ru": "светлые/русые/рыжие/тёмные/светло-русые",
+  "hair_style": "straight/curly/wavy/short/long",
+  "hair_style_ru": "прямые/кудрявые/волнистые/короткие/длинные",
+  "eye_color": "blue/brown/green/gray/hazel",
+  "eye_color_ru": "голубые/карие/зелёные/серые/ореховые",
+  "eye_shape": "round/almond/wide",
+  "eye_shape_ru": "круглые/миндалевидные/большие",
+  "face_shape": "round/oval/heart-shaped",
+  "face_shape_ru": "круглое/овальное/сердечком",
+  "skin_tone": "light/medium/tan/dark",
+  "skin_tone_ru": "светлая/средняя/смуглая/тёмная",
+  "nose_type": "small/button/normal",
+  "cheeks": "chubby/normal/defined",
+  "cheeks_ru": "пухлые/обычные/выраженные",
+  "features": ["freckles", "dimples", "glasses", "big smile"],
+  "features_ru": ["веснушки", "ямочки", "очки", "большая улыбка"],
+  "age_estimate": 5,
+  "overall_impression": "cheerful cute baby with bright eyes"
+}
+
+Будь максимально детальным - это для ПРЕМИУМ версии!"""
+    else:
+        # Стандартный анализ
+        prompt_text = """Проанализируй фото ребёнка и опиши его внешность для создания персонажа.
+
+Ответ ТОЛЬКО в формате JSON (без markdown):
+{
+  "hair_color": "blonde/brown/red/dark",
+  "hair_color_ru": "светлые/русые/рыжие/тёмные",
+  "eye_color": "blue/brown/green/gray",
+  "eye_color_ru": "голубые/карие/зелёные/серые",
+  "features": ["freckles", "glasses"] или [],
+  "features_ru": ["веснушки", "очки"] или [],
+  "age_estimate": 5-8
+}
+
+Если что-то не видно - используй "unknown"."""
+    
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=500,
+        max_tokens=800 if premium else 500,
         messages=[{
             "role": "user",
             "content": [
@@ -104,20 +155,7 @@ def analyze_photo(photo_path):
                 },
                 {
                     "type": "text",
-                    "text": """Проанализируй фото ребёнка и опиши его внешность для создания персонажа.
-
-Ответь ТОЛЬКО в формате JSON (без markdown):
-{
-  "hair_color": "blonde/brown/red/dark",
-  "hair_color_ru": "светлые/русые/рыжие/тёмные",
-  "eye_color": "blue/brown/green/gray",
-  "eye_color_ru": "голубые/карие/зелёные/серые",
-  "features": ["freckles", "glasses"] или [],
-  "features_ru": ["веснушки", "очки"] или [],
-  "age_estimate": 5-8
-}
-
-Если что-то не видно - используй "unknown"."""
+                    "text": prompt_text
                 }
             ]
         }]
@@ -134,9 +172,18 @@ def analyze_photo(photo_path):
     
     analysis = json.loads(analysis_text)
     
-    print(f"✅ Анализ: {analysis['hair_color_ru']} волосы, {analysis['eye_color_ru']} глаза")
-    if analysis['features_ru']:
-        print(f"   Особенности: {', '.join(analysis['features_ru'])}")
+    if premium:
+        print(f"✅ ПРЕМИУМ анализ:")
+        print(f"   Волосы: {analysis.get('hair_color_ru', 'н/д')} ({analysis.get('hair_style_ru', '')})")
+        print(f"   Глаза: {analysis.get('eye_color_ru', 'н/д')} ({analysis.get('eye_shape_ru', '')})")
+        print(f"   Лицо: {analysis.get('face_shape_ru', 'н/д')}, кожа: {analysis.get('skin_tone_ru', 'н/д')}")
+        print(f"   Щёчки: {analysis.get('cheeks_ru', 'н/д')}")
+        if analysis.get('features_ru'):
+            print(f"   Особенности: {', '.join(analysis['features_ru'])}")
+    else:
+        print(f"✅ Анализ: {analysis['hair_color_ru']} волосы, {analysis['eye_color_ru']} глаза")
+        if analysis.get('features_ru'):
+            print(f"   Особенности: {', '.join(analysis['features_ru'])}")
     
     return analysis
 
@@ -167,32 +214,17 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
     
     for attempt in range(max_retries):
         try:
-            if use_pulid and photo_path and os.path.exists(photo_path):
-                # ✅ ПРЕМИУМ: Используем InstantID для Pixar персонажа с лицом
-                print(f"   🎭 Используем InstantID (премиум Pixar качество)...")
-                output = replicate.run(
-                    "zsxkib/instant-id",
-                    input={
-                        "image": open(photo_path, "rb"),
-                        "prompt": prompt + ", Pixar 3D animation style, Disney character, vibrant colors, smooth rendering, professional children's book illustration",
-                        "negative_prompt": "realistic photo, adult, ugly, distorted, deformed, bad quality, blurry, dark, scary, nsfw, lowres",
-                        "width": 768,
-                        "height": 1024,
-                        "ip_adapter_scale": 0.8,  # Сила похожести лица
-                        "controlnet_conditioning_scale": 0.8,  # Сила контроля лица
-                        "num_inference_steps": 30
-                    }
-                )
-            else:
-                # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
-                output = replicate.run(
-                    "black-forest-labs/flux-1.1-pro",
-                    input={
-                        "prompt": prompt,
-                        "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
-                        "num_outputs": 1,
-                        "output_format": "png",
-                        "output_quality": 100,
+            # ✅ Используем Flux Pro для обоих тарифов
+            # Разница в детальности промпта (премиум = супер-детальный анализ фото)
+            
+            output = replicate.run(
+                "black-forest-labs/flux-1.1-pro",
+                input={
+                    "prompt": prompt,
+                    "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
+                    "num_outputs": 1,
+                    "output_format": "png",
+                    "output_quality": 100,
                         "safety_tolerance": 5,
                         "guidance": 3.5,
                         "num_inference_steps": 28
@@ -333,16 +365,34 @@ def create_storybook_v2(
     
     # Анализируем фото если есть
     if photo_path and os.path.exists(photo_path):
-        analysis = analyze_photo(photo_path)
-        hair_color = analysis['hair_color'] + "-haired"
-        hair_color_ru = analysis['hair_color_ru']
+        # ✅ Для премиума - СУПЕР-детальный анализ
+        is_premium = (plan == 'premium')
+        analysis = analyze_photo(photo_path, premium=is_premium)
+        
+        hair_color = analysis.get('hair_color', 'brown') + "-haired"
+        hair_color_ru = analysis.get('hair_color_ru', 'русые')
         
         # Дополнительные детали
         features = ""
-        if "freckles" in analysis['features']:
+        if "freckles" in analysis.get('features', []):
             features += ", with freckles"
-        if "glasses" in analysis['features']:
+        if "glasses" in analysis.get('features', []):
             features += ", wearing glasses"
+        
+        # ✅ ПРЕМИУМ: используем ВСЕ детали из анализа
+        if is_premium:
+            if analysis.get('hair_style'):
+                features += f", {analysis['hair_style']} hair"
+            if analysis.get('eye_shape'):
+                features += f", {analysis['eye_shape']} eyes"
+            if analysis.get('face_shape'):
+                features += f", {analysis['face_shape']} face"
+            if analysis.get('cheeks') == 'chubby':
+                features += ", chubby cheeks"
+            if "dimples" in analysis.get('features', []):
+                features += ", cute dimples"
+            if "big smile" in analysis.get('features', []):
+                features += ", big smile"
     else:
         # Без фото - типичные характеристики
         if gender == "boy":
