@@ -3,6 +3,7 @@
 """
 Генератор персональных сказок - ГОРОД РОБОТОВ
 С анализом фото и подстановкой данных
+✅ ИСПРАВЛЕНО: Вертикальный формат изображений 3:4 (768x1024)
 """
 
 import json
@@ -140,31 +141,34 @@ def analyze_photo(photo_path):
     return analysis
 
 def generate_illustration(prompt, output_path):
-    """Генерирует иллюстрацию через Flux Pro"""
-    print(f"   🎨 Генерирую иллюстрацию...")
+    """
+    Генерирует иллюстрацию через Flux Pro
+    ✅ ИСПРАВЛЕНО: Использует вертикальный формат 3:4 (768x1024)
+    """
+    print(f"   🎨 Генерирую иллюстрацию в формате 3:4...")
     
     import requests
     import time
     from PIL import Image
     
     try:
-        # Используем Flux Pro для максимального качества Disney/Pixar
-        # Размеры 1000x1414 - ТОЧНЫЕ пропорции A4 (21:29.7)
-        # Это предотвращает деформацию персонажей при вставке в PDF!
+        # ✅ ИСПРАВЛЕНИЕ: Используем вертикальный формат 3:4
+        # Это предотвращает сжатие изображений на мобильных экранах!
         output = replicate.run(
             "black-forest-labs/flux-1.1-pro",
             input={
                 "prompt": prompt,
-                "width": 1000,   # Было 950 - изменено для ТОЧНЫХ пропорций A4!
-                "height": 1414,  # Было 1344 - ТОЧНЫЕ пропорции!
+                "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
                 "num_outputs": 1,
                 "output_format": "png",
                 "output_quality": 100,
-                "safety_tolerance": 5  # Максимальная толерантность для детских персонажей
+                "safety_tolerance": 5,  # Максимальная толерантность для детских персонажей
+                "guidance": 3.5,
+                "num_inference_steps": 28
             }
         )
         
-        # Получаем URL (SDXL возвращает список)
+        # Получаем URL
         if isinstance(output, list):
             image_url = output[0]
         else:
@@ -185,7 +189,7 @@ def generate_illustration(prompt, output_path):
         file_size = os.path.getsize(output_path)
         print(f"   💾 Сохранено {file_size} байт")
         
-        # Проверяем целостность
+        # Проверяем целостность и размеры
         time.sleep(0.5)
         
         try:
@@ -193,11 +197,19 @@ def generate_illustration(prompt, output_path):
             img.load()
             width, height = img.size
             print(f"   ✅ Проверено: {width}x{height} пикселей")
+            
+            # Проверяем, что получили вертикальное изображение
+            if width > height:
+                print(f"   ⚠️ ВНИМАНИЕ: Изображение {width}x{height} горизонтальное!")
+            else:
+                ratio = height / width
+                print(f"   📐 Соотношение сторон: {ratio:.2f} (ожидается ~1.33 для 3:4)")
+                
         except Exception as e:
             raise ValueError(f"Файл повреждён: {e}")
             
     except Exception as e:
-        raise RuntimeError(f"Ошибка генерации SDXL: {e}")
+        raise RuntimeError(f"Ошибка генерации Flux Pro: {e}")
 
 def create_storybook_v2(
     child_name,
@@ -209,6 +221,7 @@ def create_storybook_v2(
 ):
     """
     Создаёт персональную книгу - ВЕРСИЯ 2 (все темы)
+    ✅ ОБНОВЛЕНО: Изображения теперь в вертикальном формате 3:4
     
     Параметры:
     - child_name: имя ребёнка
@@ -234,6 +247,7 @@ def create_storybook_v2(
     print("="*60)
     print(f"СОЗДАНИЕ СКАЗКИ: {child_name}")
     print(f"Тема: {theme_name}")
+    print(f"📐 Формат изображений: 3:4 (вертикальный)")
     print("="*60)
     print()
     
@@ -296,14 +310,14 @@ def create_storybook_v2(
     os.makedirs(output_dir, exist_ok=True)
     
     # Генерируем иллюстрации
-    print("🎨 Генерирую 10 иллюстраций (это займёт ~20 минут)...")
+    print("🎨 Генерирую 10 вертикальных иллюстраций 3:4 (это займёт ~20 минут)...")
     print()
     
     scenes_data = []
     
     for scene in scenes:
         scene_num = scene['number']
-        scene_title = scene.get('title', f'Сцена {scene_num}')  # Если нет title - используем номер
+        scene_title = scene.get('title', f'Сцена {scene_num}')
         print(f"Сцена {scene_num}/10: {scene_title}")
         
         # Подставляем переменные в текст
@@ -316,19 +330,25 @@ def create_storybook_v2(
         for var, value in vars_map.items():
             prompt = prompt.replace(f"{{{var}}}", value)
         
-        # Добавляем Disney/Pixar стиль для профессионального качества
-        prompt += ", Disney Pixar animation style, 3D rendered, professional children's book illustration, vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, anatomically correct hands, five fingers per hand, proper hand anatomy, high quality, masterpiece"
+        # ✅ УЛУЧШЕННЫЙ ПРОМПТ для вертикального формата
+        # Указываем AI, что нужна вертикальная композиция
+        prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration, 
+        VERTICAL COMPOSITION, full-height portrait, character centered in frame, 
+        vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, 
+        anatomically correct hands, five fingers per hand, proper hand anatomy, 
+        showing character from head to toe in vertical frame,
+        high quality, masterpiece"""
         
         # Генерируем иллюстрацию
         image_filename = f"scene_{scene_num:02d}.png"
         image_path = os.path.join(output_dir, image_filename)
         
-        # Flux Pro отлично работает с детскими персонажами!
+        # Генерируем с новым вертикальным форматом
         generate_illustration(prompt, image_path)
         
         scenes_data.append({
             "number": scene_num,
-            "title": scene_title,  # Используем опциональный title
+            "title": scene_title,
             "text": text,
             "image": image_path
         })
@@ -336,7 +356,7 @@ def create_storybook_v2(
         print()
     
     # Создаём PDF
-    print("📄 Создаю PDF книгу...")
+    print("📄 Создаю PDF книгу с вертикальными изображениями...")
     from pdf_generator import create_book_from_data
     
     # Название файла зависит от темы
@@ -376,12 +396,15 @@ def create_storybook_v2(
     print()
     print(f"📁 Папка: {output_dir}/")
     print(f"📄 PDF: {pdf_path}")
+    print(f"📐 Формат изображений: 3:4 (768x1024) - вертикальный")
     print()
     print(f"💰 Себестоимость: ~151₽ (Flux Pro + Claude)")
-    print(f"   - Flux Pro: ~120₽ (10 иллюстраций)")
+    print(f"   - Flux Pro: ~120₽ (10 иллюстраций 3:4)")
     print(f"   - Claude Sonnet: ~31₽ (текст + анализ)")
     print(f"💵 Цена продажи: 449₽")
     print(f"💸 Чистая прибыль: ~298₽")
+    print()
+    print("🎉 Изображения теперь вертикальные - никакого сжатия на телефонах!")
     print()
     
     return pdf_path
@@ -390,17 +413,19 @@ if __name__ == "__main__":
     # ПРИМЕР ИСПОЛЬЗОВАНИЯ
     
     # С фото
-    # create_storybook(
+    # create_storybook_v2(
     #     child_name="Саша",
     #     child_age=6,
     #     gender="boy",
+    #     theme_id="robot_city",
     #     photo_path="photo.jpg"
     # )
     
     # Без фото
-    create_storybook(
+    create_storybook_v2(
         child_name="Маша",
         child_age=5,
         gender="girl",
+        theme_id="robot_city",
         photo_path=None
     )
