@@ -65,6 +65,14 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 # Цена
 BOOK_PRICE = 299  # рублей
 
+# 🎁 БЕСПЛАТНЫЕ КРЕДИТЫ ДЛЯ КОМПЕНСАЦИИ
+# Формат: {user_id: количество_бесплатных_книг}
+FREE_CREDITS = {
+    380684465: 1,   # Клиент 1 - 1 бесплатная книга
+    1050991384: 1,  # Клиент 2 - 1 бесплатная книга  
+    943674820: 1    # Клиент 3 - 1 бесплатная книга
+}
+
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
 
@@ -706,6 +714,41 @@ async def process_payment(update, context):
     theme = context.user_data['theme']
     user_id = update.effective_user.id
     
+    # 🎁 ПРОВЕРКА БЕСПЛАТНОГО КРЕДИТА
+    if user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
+        # У пользователя есть бесплатный кредит!
+        FREE_CREDITS[user_id] -= 1  # Используем кредит
+        
+        # Создаём заказ в БД
+        order_id = db.create_order(
+            user_id=user_id,
+            theme=theme,
+            child_name=name,
+            child_age=age,
+            gender=gender,
+            photo_description=context.user_data.get('photo_description')
+        )
+        context.user_data['order_id'] = order_id
+        
+        # Помечаем заказ как оплаченный (бесплатный)
+        db.update_order_status(order_id, 'paid')
+        
+        # Отправляем сообщение
+        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🎁 *БЕСПЛАТНАЯ КНИГА!*\n\n"
+                 f"Спасибо за терпение! ❤️\n"
+                 f"Эта книга для вас совершенно бесплатно.\n\n"
+                 f"⏳ Генерация начинается...\n"
+                 f"Это займет около 5 минут.",
+            parse_mode='Markdown'
+        )
+        
+        # Запускаем генерацию сразу
+        await start_generation(update, context)
+        return ConversationHandler.END
+    
     # Создаём заказ в БД
     order_id = db.create_order(
         user_id=user_id,
@@ -850,6 +893,7 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         user_data = job.data.get('user_data', {})
         user_name = user_data.get('name', 'Аноним')
         user_id = chat_id
+        order_id = user_data.get('order_id')
         await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
         
         # Останавливаем проверку
