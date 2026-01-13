@@ -167,18 +167,28 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
     
     for attempt in range(max_retries):
         try:
-            # ⚠️ ВРЕМЕННОЕ РЕШЕНИЕ: PuLID модель недоступна
-            # Используем обычный Flux Pro с детальным промптом из анализа фото
-            
-            # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
-            output = replicate.run(
-                "black-forest-labs/flux-1.1-pro",
-                input={
-                    "prompt": prompt,
-                    "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
-                    "num_outputs": 1,
-                    "output_format": "png",
-                    "output_quality": 100,
+            if use_pulid and photo_path and os.path.exists(photo_path):
+                # ✅ ПРЕМИУМ: Используем face-to-many для 3D персонажа с лицом
+                print(f"   🎭 Используем face-to-many (премиум качество)...")
+                output = replicate.run(
+                    "fofr/face-to-many",
+                    input={
+                        "image": open(photo_path, "rb"),
+                        "prompt": prompt,
+                        "style": "3D",  # 3D Pixar стиль
+                        "negative_prompt": "realistic photo, adult, ugly, distorted, bad quality, blurry"
+                    }
+                )
+            else:
+                # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
+                output = replicate.run(
+                    "black-forest-labs/flux-1.1-pro",
+                    input={
+                        "prompt": prompt,
+                        "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
+                        "num_outputs": 1,
+                        "output_format": "png",
+                        "output_quality": 100,
                         "safety_tolerance": 5,
                         "guidance": 3.5,
                         "num_inference_steps": 28
