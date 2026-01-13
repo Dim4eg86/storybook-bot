@@ -1212,31 +1212,38 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
                 # Продолжаем даже если проверка не удалась
         
         if is_payment_successful(payment_id):
-            "✅ Оплата получена! Запускаю генерацию..."
-        )
-        
-        # ✅ УСТАНАВЛИВАЕМ ФЛАГ ПЕРЕД НАЧАЛОМ
-        context.user_data['generation_started'] = True
-        
-        # Обновляем БД
-        if order_id:
-            db.update_payment_status(payment_id, 'succeeded')
-            db.update_order_status(order_id, 'paid')
+            await update.message.reply_text(
+                "✅ Оплата получена! Запускаю генерацию..."
+            )
             
-            # ✅ Получаем сумму из тарифа пользователя
-            plan = context.user_data.get('plan', 'standard')
-            payment_amount = get_user_price(update.effective_user.id, plan)
-            db.update_daily_stats(revenue=payment_amount)
+            # ✅ УСТАНАВЛИВАЕМ ФЛАГ ПЕРЕД НАЧАЛОМ
+            context.user_data['generation_started'] = True
             
-            # Уведомляем админа о покупке
-            user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
-            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, payment_amount)
-        
-        await start_generation(update, context)
-    else:
+            # Обновляем БД
+            if order_id:
+                db.update_payment_status(payment_id, 'succeeded')
+                db.update_order_status(order_id, 'paid')
+                
+                # ✅ Получаем сумму из тарифа пользователя
+                plan = context.user_data.get('plan', 'standard')
+                payment_amount = get_user_price(update.effective_user.id, plan)
+                db.update_daily_stats(revenue=payment_amount)
+                
+                # Уведомляем админа о покупке
+                user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
+                await notify_admin_payment(context, update.effective_user.id, user_name, order_id, payment_amount)
+            
+            await start_generation(update, context)
+        else:
+            await update.message.reply_text(
+                "⏳ Платёж ещё не оплачен.\n\n"
+                "Пожалуйста, завершите оплату по ссылке выше."
+            )
+    except Exception as e:
+        print(f"❌ Ошибка в check_payment_command: {e}")
         await update.message.reply_text(
-            "⏳ Платёж ещё не оплачен.\n\n"
-            "Пожалуйста, завершите оплату по ссылке выше."
+            "❌ Произошла ошибка при проверке оплаты.\n\n"
+            "Попробуйте ещё раз или обратитесь в поддержку."
         )
 
 
