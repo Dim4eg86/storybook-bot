@@ -140,76 +140,130 @@ def analyze_photo(photo_path):
     
     return analysis
 
-def generate_illustration(prompt, output_path):
+def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False):
     """
-    Генерирует иллюстрацию через Flux Pro
+    Генерирует иллюстрацию через Flux Pro или PuLID
     ✅ ИСПРАВЛЕНО: Использует вертикальный формат 3:4 (768x1024)
+    ✅ ДОБАВЛЕНО: Автоматическая обработка rate limit
+    ✅ НОВОЕ: Поддержка PuLID для максимальной похожести
+    
+    Args:
+        prompt: текстовый промпт для генерации
+        output_path: путь куда сохранить изображение
+        photo_path: путь к фото ребёнка (для PuLID)
+        use_pulid: использовать ли PuLID (True для premium тарифа)
     """
-    print(f"   🎨 Генерирую иллюстрацию в формате 3:4...")
+    if use_pulid and photo_path and os.path.exists(photo_path):
+        print(f"   🎭 Генерирую с PuLID (максимальная похожесть)...")
+    else:
+        print(f"   🎨 Генерирую иллюстрацию в формате 3:4...")
     
     import requests
     import time
     from PIL import Image
     
-    try:
-        # ✅ ИСПРАВЛЕНИЕ: Используем вертикальный формат 3:4
-        # Это предотвращает сжатие изображений на мобильных экранах!
-        output = replicate.run(
-            "black-forest-labs/flux-1.1-pro",
-            input={
-                "prompt": prompt,
-                "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
-                "num_outputs": 1,
-                "output_format": "png",
-                "output_quality": 100,
-                "safety_tolerance": 5,  # Максимальная толерантность для детских персонажей
-                "guidance": 3.5,
-                "num_inference_steps": 28
-            }
-        )
-        
-        # Получаем URL
-        if isinstance(output, list):
-            image_url = output[0]
-        else:
-            image_url = output
-        
-        print(f"   📥 Скачиваю изображение...")
-        
-        # Скачиваем
-        response = requests.get(image_url, timeout=60, stream=True)
-        response.raise_for_status()
-        
-        # Сохраняем
-        with open(output_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        
-        file_size = os.path.getsize(output_path)
-        print(f"   💾 Сохранено {file_size} байт")
-        
-        # Проверяем целостность и размеры
-        time.sleep(0.5)
-        
+    max_retries = 5  # Максимум попыток
+    retry_delay = 10  # Начальная задержка в секундах
+    
+    for attempt in range(max_retries):
         try:
-            img = Image.open(output_path)
-            img.load()
-            width, height = img.size
-            print(f"   ✅ Проверено: {width}x{height} пикселей")
-            
-            # Проверяем, что получили вертикальное изображение
-            if width > height:
-                print(f"   ⚠️ ВНИМАНИЕ: Изображение {width}x{height} горизонтальное!")
+            if use_pulid and photo_path and os.path.exists(photo_path):
+                # ✅ ПРЕМИУМ: Используем PuLID для максимальной похожести
+                output = replicate.run(
+                    "zsxkib/pulid:8baa7ef2255075b46f4d91cd238c21d31181950b84ce3d1c6d653eb77c0bf68e",
+                    input={
+                        "main_face_image": open(photo_path, "rb"),
+                        "prompt": prompt + ", Pixar 3D animation style, Disney quality, professional children's book illustration",
+                        "negative_prompt": "realistic photo, adult face, ugly, distorted, deformed, bad quality, blurry, dark, scary, nsfw",
+                        "style_strength_ratio": 25,  # Похожесть на фото
+                        "id_weight": 1.0,            # Сила лица
+                        "num_steps": 20,
+                        "guidance_scale": 5,
+                        "num_outputs": 1,
+                        "output_format": "png"
+                    }
+                )
             else:
-                ratio = height / width
-                print(f"   📐 Соотношение сторон: {ratio:.2f} (ожидается ~1.33 для 3:4)")
+                # ✅ СТАНДАРТ: Обычный Flux Pro с вертикальным форматом
+                output = replicate.run(
+                    "black-forest-labs/flux-1.1-pro",
+                    input={
+                        "prompt": prompt,
+                        "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
+                        "num_outputs": 1,
+                        "output_format": "png",
+                        "output_quality": 100,
+                        "safety_tolerance": 5,
+                        "guidance": 3.5,
+                        "num_inference_steps": 28
+                    }
+                )
+            
+            # Получаем URL
+            if isinstance(output, list):
+                image_url = output[0]
+            else:
+                image_url = output
+            
+            print(f"   📥 Скачиваю изображение...")
+            
+            # Скачиваем
+            response = requests.get(image_url, timeout=60, stream=True)
+            response.raise_for_status()
+            
+            # Сохраняем
+            with open(output_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            file_size = os.path.getsize(output_path)
+            print(f"   💾 Сохранено {file_size} байт")
+            
+            # Проверяем целостность и размеры
+            time.sleep(0.5)
+            
+            try:
+                img = Image.open(output_path)
+                img.load()
+                width, height = img.size
+                print(f"   ✅ Проверено: {width}x{height} пикселей")
+                
+                # Проверяем, что получили вертикальное изображение
+                if width > height:
+                    print(f"   ⚠️ ВНИМАНИЕ: Изображение {width}x{height} горизонтальное!")
+                else:
+                    ratio = height / width
+                    print(f"   📐 Соотношение сторон: {ratio:.2f} (ожидается ~1.33 для 3:4)")
+                    
+            except Exception as e:
+                raise ValueError(f"Файл повреждён: {e}")
+            
+            # ✅ Успех! Выходим из цикла retry
+            return
                 
         except Exception as e:
-            raise ValueError(f"Файл повреждён: {e}")
+            error_str = str(e)
             
-    except Exception as e:
-        raise RuntimeError(f"Ошибка генерации Flux Pro: {e}")
+            # Проверяем rate limit ошибку
+            if "429" in error_str or "throttled" in error_str.lower() or "rate limit" in error_str.lower():
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    print(f"   ⏳ Rate limit! Жду {wait_time} секунд... (попытка {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"   ❌ Превышен лимит попыток после {max_retries} попыток")
+                    raise RuntimeError(
+                        f"❌ Ошибка rate limit Replicate.\n"
+                        f"Решение:\n"
+                        f"1. Пополни баланс на https://replicate.com/account/billing (минимум $10)\n"
+                        f"2. Или подожди несколько минут и попробуй снова\n\n"
+                        f"Детали: {error_str}"
+                    )
+            else:
+                # Другая ошибка - не пытаемся повторить
+                raise RuntimeError(f"Ошибка генерации Flux Pro: {e}")
 
 def create_storybook_v2(
     child_name,
@@ -217,19 +271,22 @@ def create_storybook_v2(
     gender,  # "boy" или "girl"
     theme_id='robot_city',  # ID темы
     photo_path=None,
-    story_id=None
+    story_id=None,
+    plan='standard'  # ✅ НОВОЕ: 'standard' или 'premium'
 ):
     """
     Создаёт персональную книгу - ВЕРСИЯ 2 (все темы)
     ✅ ОБНОВЛЕНО: Изображения теперь в вертикальном формате 3:4
+    ✅ НОВОЕ: Поддержка тарифов (standard/premium с PuLID)
     
     Параметры:
     - child_name: имя ребёнка
     - child_age: возраст
     - gender: "boy" или "girl"
     - theme_id: ID темы (robot_city, space, dinosaurs, underwater, fairy_land, princess, unicorns, knight)
-    - photo_path: путь к фото (опционально)
+    - photo_path: путь к фото (опционально для standard, обязательно для premium)
     - story_id: ID конкретной истории или None (случайная)
+    - plan: 'standard' (обычный Flux) или 'premium' (PuLID с максимальной похожестью)
     """
     
     # Загружаем все темы
@@ -244,10 +301,17 @@ def create_storybook_v2(
     theme_name = theme_data['name']
     story_data = theme_data['story']
     
+    plan_name = "СКАЗКА-ДВОЙНИК (ПРЕМИУМ)" if plan == "premium" else "СКАЗКА (СТАНДАРТ)"
+    
     print("="*60)
-    print(f"СОЗДАНИЕ СКАЗКИ: {child_name}")
+    print(f"СОЗДАНИЕ: {plan_name}")
+    print(f"Ребёнок: {child_name}")
     print(f"Тема: {theme_name}")
     print(f"📐 Формат изображений: 3:4 (вертикальный)")
+    if plan == "premium":
+        print(f"🎭 Режим: PuLID (максимальная похожесть)")
+    else:
+        print(f"📚 Режим: Стандартный Flux")
     print("="*60)
     print()
     
@@ -343,8 +407,9 @@ def create_storybook_v2(
         image_filename = f"scene_{scene_num:02d}.png"
         image_path = os.path.join(output_dir, image_filename)
         
-        # Генерируем с новым вертикальным форматом
-        generate_illustration(prompt, image_path)
+        # ✅ Генерируем с учётом тарифа
+        use_pulid = (plan == 'premium')
+        generate_illustration(prompt, image_path, photo_path=photo_path, use_pulid=use_pulid)
         
         scenes_data.append({
             "number": scene_num,
@@ -352,6 +417,15 @@ def create_storybook_v2(
             "text": text,
             "image": image_path
         })
+        
+        # ✅ Задержка между запросами для избежания rate limit
+        # Если баланс Replicate < $5, лимит 6 запросов/минуту
+        # Значит нужна пауза 10+ секунд между запросами
+        if scene_num < len(scenes):  # Не ждём после последней сцены
+            import time
+            delay = 12 if not use_pulid else 15  # PuLID чуть медленнее
+            print(f"   ⏳ Пауза {delay} секунд перед следующей генерацией...")
+            time.sleep(delay)
         
         print()
     
