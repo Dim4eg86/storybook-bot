@@ -214,17 +214,41 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
     
     for attempt in range(max_retries):
         try:
-            # ✅ Используем Flux Pro для обоих тарифов
-            # Разница в детальности промпта (премиум = супер-детальный анализ фото)
-            
-            output = replicate.run(
-                "black-forest-labs/flux-1.1-pro",
-                input={
-                    "prompt": prompt,
-                    "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
-                    "num_outputs": 1,
-                    "output_format": "png",
-                    "output_quality": 100,
+            # ✅ ПРЕМИУМ: Используем Flux Kontext Pro с фото
+            if use_pulid and photo_path and os.path.exists(photo_path):
+                print(f"   🎭 Используем Flux Kontext Pro (премиум с сохранением лица)...")
+                
+                # Читаем фото
+                with open(photo_path, "rb") as f:
+                    photo_data = f.read()
+                
+                # Конвертируем в data URI для Kontext
+                import base64
+                photo_base64 = base64.b64encode(photo_data).decode('utf-8')
+                photo_uri = f"data:image/jpeg;base64,{photo_base64}"
+                
+                output = replicate.run(
+                    "black-forest-labs/flux-kontext-pro",
+                    input={
+                        "image": photo_uri,
+                        "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics",
+                        "aspect_ratio": "3:4",
+                        "num_outputs": 1,
+                        "output_format": "png",
+                        "output_quality": 100,
+                        "safety_tolerance": 2
+                    }
+                )
+            else:
+                # ✅ СТАНДАРТ: Обычный Flux Pro без фото
+                output = replicate.run(
+                    "black-forest-labs/flux-1.1-pro",
+                    input={
+                        "prompt": prompt,
+                        "aspect_ratio": "3:4",  # ✅ ВЕРТИКАЛЬНЫЙ ФОРМАТ (768x1024)
+                        "num_outputs": 1,
+                        "output_format": "png",
+                        "output_quality": 100,
                         "safety_tolerance": 5,
                         "guidance": 3.5,
                         "num_inference_steps": 28
