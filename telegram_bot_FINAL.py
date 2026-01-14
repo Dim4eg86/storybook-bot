@@ -1019,51 +1019,52 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         
         # Проверяем статус
         if is_payment_successful(payment_id):
-            # Оплата прошла!
+            # ✅ ОПЛАТА ПРОШЛА! Можно генерировать
             await context.bot.send_message(
                 chat_id=chat_id,
                 text="✅ *Оплата получена!*\n\nЗапускаю генерацию книги...",
                 parse_mode='Markdown'
             )
-        
-        # Обновляем статусы в БД
-        db.update_payment_status(payment_id, 'succeeded')
-        db.update_order_status(user_data['order_id'], 'paid')
-        
-        # ✅ Получаем реальную сумму оплаты
-        payment_amount = job.data.get('price', PRICE_STANDARD)
-        db.update_daily_stats(revenue=payment_amount)
-        
-        # Уведомляем админа о покупке
-        user_data = job.data.get('user_data', {})
-        user_name = user_data.get('name', 'Аноним')
-        user_id = chat_id
-        order_id = user_data.get('order_id')
-        await notify_admin_payment(context, user_id, user_name, order_id, payment_amount)
-        
-        # Останавливаем проверку
-        job.schedule_removal()
-        
-        # ✅ УСТАНАВЛИВАЕМ ФЛАГ в user_data (сохраняем в БД)
-        user_data['generation_started'] = True
-        
-        # Запускаем генерацию
-        # Создаём временный объект для передачи в start_generation
-        class TempUpdate:
-            def __init__(self, chat_id):
-                self.effective_user = type('obj', (object,), {'id': chat_id})
-                self.callback_query = None
-                self.message = type('obj', (object,), {'chat_id': chat_id})
-        
-        class TempContext:
-            def __init__(self, bot, user_data):
-                self.bot = bot
-                self.user_data = user_data
-        
-        temp_update = TempUpdate(chat_id)
-        temp_context = TempContext(context.bot, user_data)
-        
-        await start_generation(temp_update, temp_context)
+            
+            # Обновляем статусы в БД
+            db.update_payment_status(payment_id, 'succeeded')
+            db.update_order_status(user_data['order_id'], 'paid')
+            
+            # ✅ Получаем реальную сумму оплаты
+            payment_amount = job.data.get('price', PRICE_STANDARD)
+            db.update_daily_stats(revenue=payment_amount)
+            
+            # Уведомляем админа о покупке
+            user_data = job.data.get('user_data', {})
+            user_name = user_data.get('name', 'Аноним')
+            user_id = chat_id
+            order_id = user_data.get('order_id')
+            await notify_admin_payment(context, user_id, user_name, order_id, payment_amount)
+            
+            # Останавливаем проверку
+            job.schedule_removal()
+            
+            # ✅ УСТАНАВЛИВАЕМ ФЛАГ в user_data (сохраняем в БД)
+            user_data['generation_started'] = True
+            
+            # Запускаем генерацию
+            # Создаём временный объект для передачи в start_generation
+            class TempUpdate:
+                def __init__(self, chat_id):
+                    self.effective_user = type('obj', (object,), {'id': chat_id})
+                    self.callback_query = None
+                    self.message = type('obj', (object,), {'chat_id': chat_id})
+            
+            class TempContext:
+                def __init__(self, bot, user_data):
+                    self.bot = bot
+                    self.user_data = user_data
+            
+            temp_update = TempUpdate(chat_id)
+            temp_context = TempContext(context.bot, user_data)
+            
+            await start_generation(temp_update, temp_context)
+        # else: оплата ещё не прошла - продолжаем проверку
     
     except Forbidden:
         # Пользователь заблокировал бота - останавливаем проверку
