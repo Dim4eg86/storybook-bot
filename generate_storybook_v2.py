@@ -230,7 +230,7 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
                 output = replicate.run(
                     "black-forest-labs/flux-kontext-pro",
                     input={
-                        "image": photo_uri,
+                        "input_image": photo_uri,
                         "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics",
                         "aspect_ratio": "3:4",
                         "num_outputs": 1,
