@@ -64,7 +64,7 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
 # 💰 ЦЕНЫ НА ТАРИФЫ
 PRICE_STANDARD = 290   # Сказка (обычный Flux)
-PRICE_PREMIUM = 390    # Сказка-двойник (PuLID с фото)
+PRICE_PREMIUM = 390    # Сказка по ФОТО (детальный AI анализ)
 
 # 👑 VIP ЦЕНЫ (персональные скидки)
 # Формат: {user_id: {'standard': цена_стандарт, 'premium': цена_премиум}}
@@ -624,7 +624,7 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data="plan_standard"
         )],
         [InlineKeyboardButton(
-            f"🎭 Сказка-двойник - {price_premium}₽ 🔥",
+            f"🎭 Сказка по ФОТО - {price_premium}₽ 🔥",
             callback_data="plan_premium"
         )]
     ]
@@ -639,12 +639,13 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Стилизованный персонаж\n"
             "• Учитываем цвет волос, глаз\n"
             "• Красивый Disney/Pixar стиль\n\n"
-            f"🎭 *Сказка-двойник* — {price_premium}₽ 🔥\n"
-            "*Персонаж КАК ЖИВОЙ* — похож на ребёнка!\n"
-            "• 🎯 AI анализ лица с фото\n"
-            "• 📸 Максимальная похожесть\n"
-            "• ✨ \"Мама, это же я!\"\n"
-            "• 👑 Самое популярное!"
+            f"🎭 *Сказка по ФОТО* — {price_premium}₽ 🔥\n"
+            "Персонаж создаётся по фото малыша!\n"
+            "• 📸 Супер-детальный AI анализ\n"
+            "• 🎨 Точный цвет волос, глаз, кожи\n"
+            "• ✨ Стиль волос, форма лица, особенности\n"
+            "• 💎 15+ характеристик (vs 5 в базовой)\n"
+            "• 🌟 Персонаж вдохновлён вашим ребёнком!"
         ),
         parse_mode='Markdown',
         reply_markup=reply_markup
@@ -661,7 +662,7 @@ async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     plan = query.data.replace("plan_", "")  # 'standard' или 'premium'
     context.user_data['plan'] = plan
     
-    plan_name = "Сказка" if plan == "standard" else "Сказка-двойник"
+    plan_name = "Сказка" if plan == "standard" else "Сказка по ФОТО"
     
     keyboard = [
         [InlineKeyboardButton("👦 Мальчик", callback_data="gender_boy")],
@@ -746,7 +747,7 @@ async def age_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Для премиум тарифа фото ОБЯЗАТЕЛЬНО
         await update.message.reply_text(
             f"📸 *Загрузите фото ребёнка*\n\n"
-            f"Для тарифа \"Сказка-двойник\" фото необходимо,\n"
+            f"Для тарифа \"Сказка по ФОТО\" фото необходимо,\n"
             f"чтобы персонаж был максимально похож!\n\n"
             f"💡 *Для лучшего результата:*\n"
             f"• Фото анфас (лицом к камере)\n"
@@ -912,7 +913,7 @@ async def process_payment(update, context):
     plan = context.user_data.get('plan', 'standard')
     price = get_user_price(user_id, plan)
     
-    plan_name = "Сказка" if plan == "standard" else "Сказка-двойник"
+    plan_name = "Сказка" if plan == "standard" else "Сказка по ФОТО"
     logger.info(f"💰 Цена для {user_id}: {price}₽ (тариф: {plan})")
     
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
@@ -1105,7 +1106,7 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # ✅ НОВОЕ: разное сообщение для разных тарифов
     plan_emoji = "🎭" if plan == "premium" else "📚"
-    plan_text = "Сказка-двойник" if plan == "premium" else "Сказка"
+    plan_text = "Сказка по ФОТО" if plan == "premium" else "Сказка"
     
     status_message = await context.bot.send_message(
         chat_id=chat_id,
@@ -1141,7 +1142,7 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ✅ НОВОЕ: разные сообщения для разных тарифов
         if plan == "premium":
             caption_text = (
-                f"🎉 *Ваша Сказка-двойник готова!*\n\n"
+                f"🎉 *Ваша Сказка по ФОТО готова!*\n\n"
                 f"🎭 Персонаж максимально похож на {name_accusative}!\n"
                 f"📖 \"{name} - {theme_name}\"\n\n"
                 f"Расскажите друзьям! 🎁"
