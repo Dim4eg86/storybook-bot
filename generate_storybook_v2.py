@@ -218,27 +218,20 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
             if use_pulid and photo_path and os.path.exists(photo_path):
                 print(f"   🎭 Используем Flux Kontext Pro (премиум с сохранением лица)...")
                 
-                # Читаем фото
+                # Загружаем фото напрямую через Replicate (не base64!)
                 with open(photo_path, "rb") as f:
-                    photo_data = f.read()
-                
-                # Конвертируем в data URI для Kontext
-                import base64
-                photo_base64 = base64.b64encode(photo_data).decode('utf-8')
-                photo_uri = f"data:image/jpeg;base64,{photo_base64}"
-                
-                output = replicate.run(
-                    "black-forest-labs/flux-kontext-pro",
-                    input={
-                        "input_image": photo_uri,
-                        "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics",
-                        "aspect_ratio": "3:4",
-                        "num_outputs": 1,
-                        "output_format": "png",
-                        "output_quality": 100,
-                        "safety_tolerance": 2
-                    }
-                )
+                    output = replicate.run(
+                        "black-forest-labs/flux-kontext-pro",
+                        input={
+                            "input_image": f,  # ← Передаём файл напрямую!
+                            "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics",
+                            "aspect_ratio": "3:4",
+                            "num_outputs": 1,
+                            "output_format": "png",
+                            "output_quality": 100,
+                            "safety_tolerance": 2
+                        }
+                    )
             else:
                 # ✅ СТАНДАРТ: Обычный Flux Pro без фото
                 output = replicate.run(
