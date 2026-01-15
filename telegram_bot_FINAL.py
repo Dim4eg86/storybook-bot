@@ -1008,16 +1008,11 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
         # ✅ ЗАЩИТА: Проверяем что заказ ещё не обработан
         order_id = user_data.get('order_id')
         if order_id:
-            try:
-                conn = db.conn
-                cursor = conn.execute("SELECT status FROM orders WHERE order_id = ?", (order_id,))
-                result = cursor.fetchone()
-                if result and result[0] in ['paid', 'completed']:
-                    # Заказ уже обработан - останавливаем проверку
-                    job.schedule_removal()
-                    return
-            except Exception as e:
-                print(f"⚠️ Ошибка проверки статуса: {e}")
+            # Проверяем флаг generation_started вместо БД
+            if user_data.get('generation_started'):
+                # Заказ уже обработан - останавливаем проверку
+                job.schedule_removal()
+                return
         
         # Проверяем статус
         if is_payment_successful(payment_id):
@@ -1187,33 +1182,16 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
     if not payment_id:
         await update.message.reply_text("❌ Нет активного платежа")
         return
+    
+    # ✅ ЗАЩИТА: Проверяем что генерация ещё не началась
+    if context.user_data.get('generation_started'):
+        await update.message.reply_text(
+            "⏳ Генерация уже началась! Пожалуйста, подождите.\n\n"
+            "Создание книги занимает 3-5 минут."
+        )
+        return
+    
     try:
-        # ✅ ЗАЩИТА: Проверяем что генерация ещё не началась
-        if context.user_data.get('generation_started'):
-            await update.message.reply_text(
-                "⏳ Генерация уже началась! Пожалуйста, подождите.\n\n"
-                "Создание книги занимает 3-5 минут."
-            )
-            return
-        
-        # ✅ ЗАЩИТА: Проверяем что заказ ещё не обработан (через БД)
-        order_id = context.user_data.get('order_id')
-        if order_id:
-            try:
-                # Прямой SQL запрос к БД
-                conn = db.conn
-                cursor = conn.execute("SELECT status FROM orders WHERE order_id = ?", (order_id,))
-                result = cursor.fetchone()
-                if result and result[0] in ['paid', 'completed']:
-                    await update.message.reply_text(
-                        "✅ Этот заказ уже обработан!\n\n"
-                        "Генерация идёт или завершена."
-                    )
-                    return
-            except Exception as e:
-                print(f"⚠️ Ошибка проверки статуса заказа: {e}")
-                # Продолжаем даже если проверка не удалась
-        
         if is_payment_successful(payment_id):
             await update.message.reply_text(
                 "✅ Оплата получена! Запускаю генерацию..."
