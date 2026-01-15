@@ -800,6 +800,9 @@ async def want_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получено фото"""
+    from PIL import Image
+    import os
+    
     photo_file = await update.message.photo[-1].get_file()
     
     # Сохраняем фото
@@ -807,12 +810,48 @@ async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_path = f"temp_photo_{user_id}.jpg"
     await photo_file.download_to_drive(photo_path)
     
-    context.user_data['photo_path'] = photo_path
-    log_event('photo_uploaded', update.effective_user.id)
-    
-    # Переходим к оплате
-    await process_payment(update, context)
-    return PAYMENT
+    try:
+        # ✅ ВАЛИДАЦИЯ И ОПТИМИЗАЦИЯ ФОТО
+        img = Image.open(photo_path)
+        
+        # Конвертируем в RGB (на случай PNG/RGBA)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Проверяем размер
+        file_size = os.path.getsize(photo_path)
+        max_dimension = max(img.size)
+        
+        # Если фото больше 5MB или разрешение >2000px - сжимаем
+        if file_size > 5 * 1024 * 1024 or max_dimension > 2000:
+            print(f"📸 Сжимаем фото: {file_size/1024/1024:.1f}MB, {img.size}")
+            
+            # Уменьшаем разрешение если нужно
+            if max_dimension > 2000:
+                ratio = 2000 / max_dimension
+                new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+            
+            # Сохраняем с оптимизацией
+            img.save(photo_path, 'JPEG', quality=85, optimize=True)
+            
+            new_size = os.path.getsize(photo_path)
+            print(f"✅ Сжато: {new_size/1024/1024:.1f}MB")
+        
+        context.user_data['photo_path'] = photo_path
+        log_event('photo_uploaded', update.effective_user.id)
+        
+        # Переходим к оплате
+        await process_payment(update, context)
+        return PAYMENT
+        
+    except Exception as e:
+        print(f"❌ Ошибка обработки фото: {e}")
+        await update.message.reply_text(
+            "❌ Ошибка обработки фото.\n\n"
+            "Попробуйте другое фото (JPG/JPEG, до 5MB)"
+        )
+        return GETTING_PHOTO
 
 
 async def skip_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
