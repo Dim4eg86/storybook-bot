@@ -63,7 +63,9 @@ PAYMENT_ENABLED = bool(YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Укажи свой user_id
 
 # Цена
-BOOK_PRICE = 299  # рублей
+# Цены
+BOOK_PRICE_BASE = 290    # Базовая версия
+BOOK_PRICE_PREMIUM = 390 # Премиум с анализом фото
 
 # 🎁 БЕСПЛАТНЫЕ КРЕДИТЫ ДЛЯ КОМПЕНСАЦИИ
 # Формат: {user_id: количество_бесплатных_книг}
@@ -75,7 +77,7 @@ FREE_CREDITS = {
 }
 
 # Состояния разговора
-CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, GETTING_PHOTO, PAYMENT = range(6)
+CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, CHOOSING_VERSION, GETTING_PHOTO, PAYMENT = range(7)
 
 
 def decline_name_accusative(name, gender):
@@ -132,7 +134,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "• Персонаж похож на вашего ребёнка\n"
                     "• Профессиональное качество\n"
                     "• PDF файл для печати\n\n"
-                    f"💰 Цена: {BOOK_PRICE}₽\n"
+                    f"💰 Цена: {BOOK_PRICE_BASE}₽\n"
                     "⏱️ Готово за 5 минут\n\n"
                     "*Выберите действие:*"
                 ),
@@ -151,7 +153,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Персонаж похож на вашего ребёнка\n"
             "• Профессиональное качество\n"
             "• PDF файл для печати\n\n"
-            f"💰 Цена: {BOOK_PRICE}₽\n"
+            f"💰 Цена: {BOOK_PRICE_BASE}₽\n"
             "⏱️ Готово за 5 минут\n\n"
             "*Выберите действие:*",
             parse_mode='Markdown',
@@ -221,7 +223,7 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
             "• Особенности (веснушки, очки)\n"
             "Можно пропустить — создам типичного персонажа.\n\n"
             "*Шаг 6. Оплатите* 💳\n"
-            f"Цена: {BOOK_PRICE}₽\n\n"
+            f"Цена: {BOOK_PRICE_BASE}₽\n\n"
             "*Шаг 7. Получите книгу!* 📖\n"
             "⏱️ Готово за 5 минут\n"
             "• 10 страниц с иллюстрациями\n"
@@ -630,25 +632,107 @@ async def age_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     context.user_data['age'] = age
     
-    # Переходим к фото
+    # Показываем выбор версии
     keyboard = [
-        [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_photo")]
+        [InlineKeyboardButton("📖 Базовая 290₽", callback_data="version_base")],
+        [InlineKeyboardButton("⭐ Премиум 390₽ - Вдохновленная вашим ребенком", callback_data="version_premium")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"📸 *Хотите, чтобы герой был похож на вашего ребёнка?*\n\n"
-        f"Загрузите фото, и я проанализирую внешность:\n"
-        f"• Цвет волос\n"
-        f"• Цвет глаз\n"
-        f"• Особенности (веснушки, очки)\n\n"
-        f"Или пропустите — создам типичного персонажа.",
+        f"💎 *Выберите версию книги:*\n\n"
+        f"📖 *БАЗОВАЯ - 290₽*\n"
+        f"• Персонаж с именем вашего ребенка\n"
+        f"• 10 красочных иллюстраций\n"
+        f"• Увлекательная история\n\n"
+        f"⭐ *ПРЕМИУМ - 390₽*\n"
+        f"• Всё из базовой версии +\n"
+        f"• *Герой ПОХОЖ на вашего ребенка!*\n"
+        f"• Анализ фото (цвет волос, глаз, особенности)\n"
+        f"• Максимальная персонализация\n\n"
+        f"_Разница всего 100₽ за уникальность!_",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    return CHOOSING_VERSION
+
+
+async def version_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбрана базовая версия - без фото"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['version'] = 'base'
+    context.user_data['photo_path'] = None
+    log_event('version_base_selected', update.effective_user.id)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="✅ *Базовая версия выбрана!*\n\n"
+             "Создам персонажа с именем вашего ребенка.\n\n"
+             "Переходим к оплате...",
+        parse_mode='Markdown'
+    )
+    
+    # Сразу к оплате
+    await process_payment(update, context)
+    return PAYMENT
+
+
+async def version_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбрана премиум версия - с фото"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['version'] = 'premium'
+    log_event('version_premium_selected', update.effective_user.id)
+    
+    # Переходим к фото
+    keyboard = [
+        [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
+        [InlineKeyboardButton("⏭️ Пропустить (базовая цена)", callback_data="downgrade_to_base")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "⭐ *Премиум версия выбрана!*\n\n"
+            "📸 Загрузите фото вашего ребенка,\n"
+            "и я создам героя МАКСИМАЛЬНО похожего!\n\n"
+            "💡 Для лучшего результата:\n"
+            "• Фото анфас (лицом к камере)\n"
+            "• Хорошее освещение\n"
+            "• Ребёнок один на фото\n\n"
+            "_Или пропустите, если передумали_"
+        ),
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
     
     return GETTING_PHOTO
+
+
+async def downgrade_to_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пользователь передумал и хочет базовую версию"""
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['version'] = 'base'
+    context.user_data['photo_path'] = None
+    log_event('downgrade_to_base', update.effective_user.id)
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="📖 Хорошо, создам базовую версию.\n\n"
+             "Переходим к оплате...",
+        parse_mode='Markdown'
+    )
+    
+    # К оплате с базовой ценой
+    await process_payment(update, context)
+    return PAYMENT
 
 
 async def want_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -782,12 +866,17 @@ async def process_payment(update, context):
         await start_generation(update, context)
         return ConversationHandler.END
     
-    # 💰 СПЕЦИАЛЬНАЯ ЦЕНА ДЛЯ ВЛАДЕЛЬЦА
+    # 💰 ОПРЕДЕЛЯЕМ ЦЕНУ
     user_username = update.effective_user.username
     if user_username and user_username.lower() == "dim4eg86":
         price = 5  # Тестовая цена для владельца
     else:
-        price = BOOK_PRICE  # Обычная цена 299₽
+        # Проверяем выбранную версию
+        version = context.user_data.get('version', 'base')
+        if version == 'premium':
+            price = BOOK_PRICE_PREMIUM  # Премиум 390₽
+        else:
+            price = BOOK_PRICE_BASE  # Базовая 290₽
     
     # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
     payment_data = create_payment(
@@ -888,13 +977,13 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
             # Обновляем статусы в БД
             db.update_payment_status(payment_id, 'succeeded')
             db.update_order_status(user_data['order_id'], 'paid')
-            db.update_daily_stats(revenue=BOOK_PRICE)
+            db.update_daily_stats(revenue=BOOK_PRICE_BASE)
             
             # Уведомляем админа о покупке
             user_name = user_data.get('name', 'Аноним')
             user_id = chat_id
             order_id = user_data.get('order_id')
-            await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE)
+            await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE_BASE)
             
             # Останавливаем проверку
             job.schedule_removal()
@@ -1039,11 +1128,11 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
         if order_id:
             db.update_payment_status(payment_id, 'succeeded')
             db.update_order_status(order_id, 'paid')
-            db.update_daily_stats(revenue=BOOK_PRICE)
+            db.update_daily_stats(revenue=BOOK_PRICE_BASE)
             
             # Уведомляем админа о покупке
             user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
-            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE)
+            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE_BASE)
         
         await start_generation(update, context)
     else:
@@ -1306,8 +1395,13 @@ def main():
             GETTING_AGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, age_received)
             ],
+            CHOOSING_VERSION: [
+                CallbackQueryHandler(version_base_callback, pattern='^version_base$'),
+                CallbackQueryHandler(version_premium_callback, pattern='^version_premium$')
+            ],
             GETTING_PHOTO: [
                 CallbackQueryHandler(want_photo_callback, pattern='^want_photo$'),
+                CallbackQueryHandler(downgrade_to_base_callback, pattern='^downgrade_to_base$'),
                 CallbackQueryHandler(skip_photo_callback, pattern='^skip_photo$'),
                 MessageHandler(filters.PHOTO, photo_received)
             ],
