@@ -76,6 +76,11 @@ FREE_CREDITS = {
     5120925074: 1   # Клиент 4 - 1 бесплатная книга (добавлен 30.01.2026)
 }
 
+# ♾️ ТЕСТОВЫЕ АККАУНТЫ С НЕОГРАНИЧЕННЫМИ БЕСПЛАТНЫМИ КНИГАМИ
+TEST_UNLIMITED_ACCOUNTS = [
+    610820340  # Дима - тестирование (неограниченно)
+]
+
 # Состояния разговора
 CHOOSING_THEME, CHOOSING_GENDER, GETTING_NAME, GETTING_AGE, CHOOSING_VERSION, GETTING_PHOTO, PAYMENT = range(7)
 
@@ -798,6 +803,38 @@ async def process_payment(update, context):
     gender = context.user_data['gender']
     theme = context.user_data['theme']
     user_id = update.effective_user.id
+    
+    # ♾️ ПРОВЕРКА ТЕСТОВОГО АККАУНТА (НЕОГРАНИЧЕННО)
+    if user_id in TEST_UNLIMITED_ACCOUNTS:
+        # Тестовый аккаунт - всегда бесплатно!
+        # Создаём заказ в БД
+        order_id = db.create_order(
+            user_id=user_id,
+            theme=theme,
+            child_name=name,
+            child_age=age,
+            gender=gender,
+            photo_description=context.user_data.get('photo_description')
+        )
+        context.user_data['order_id'] = order_id
+        
+        # Помечаем заказ как оплаченный (бесплатный)
+        db.update_order_status(order_id, 'paid')
+        
+        # Отправляем сообщение
+        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🧪 *ТЕСТОВЫЙ РЕЖИМ*\n\n"
+                 f"Книга создается бесплатно для тестирования.\n\n"
+                 f"⏳ Генерация начинается...\n"
+                 f"Это займет около 5 минут.",
+            parse_mode='Markdown'
+        )
+        
+        # Запускаем генерацию сразу
+        await start_generation(update, context)
+        return ConversationHandler.END
     
     # 🎁 ПРОВЕРКА БЕСПЛАТНОГО КРЕДИТА
     if user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
