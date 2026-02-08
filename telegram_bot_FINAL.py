@@ -421,9 +421,14 @@ async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TY
     theme_buttons = []
     
     for theme_id, theme_data in themes.items():
+        # Используем emoji если есть, иначе просто название
+        emoji = theme_data.get('emoji', '')
+        name = theme_data['name']
+        button_text = f"{emoji} {name}".strip() if emoji else name
+        
         theme_buttons.append(
             InlineKeyboardButton(
-                f"{theme_data['emoji']} {theme_data['name']}", 
+                button_text, 
                 callback_data=f"theme_{theme_id}"
             )
         )
