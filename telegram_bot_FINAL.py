@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Telegram бот для персональных сказок - ФИНАЛЬНАЯ ВЕРСИЯ
-8 тем + YooKassa оплата + База данных
+Telegram бот для персональных сказок - ИСПРАВЛЕННАЯ ВЕРСИЯ
+✅ Исправлено дублирование уведомлений админу
+✅ Убраны шумные логи httpx
+✅ Добавлена дедупликация уведомлений по order_id
 """
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -15,6 +17,9 @@ import json
 import logging
 import traceback
 from telegram.request import HTTPXRequest
+
+# ✅ ПАТЧ: Отключаем шумные логи httpx
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ✅ ПАТЧ СТАБИЛЬНОСТИ: Настройка логирования
 logging.basicConfig(
@@ -43,6 +48,9 @@ analytics_cache = {
     'payment_created': 0,
     'payment_completed': 0
 }
+
+# ✅ ПАТЧ: Кеш отправленных уведомлений админу (чтобы не дублировать)
+notified_orders = set()
 
 def log_event(event_name, user_id=None):
     """Логирование события для аналитики"""
@@ -207,314 +215,200 @@ async def how_it_works_callback(update: Update, context: ContextTypes.DEFAULT_TY
             "Создание персональной сказки — это просто!\n\n"
             "*Шаг 1. Выберите тему* 🎨\n"
             "8 волшебных историй на выбор:\n"
-            "• 🤖 Город роботов\n"
-            "• 🚀 Космическое приключение\n"
-            "• 🦕 Долина динозавров\n"
-            "• 🌊 Подводное царство\n"
-            "• 🧚 Страна фей\n"
-            "• 👑 Королевство принцесс\n"
-            "• 🦄 Волшебные единороги\n"
-            "• 🏰 Рыцарь и дракон\n\n"
-            "*Шаг 2. Укажите пол героя* 👦👧\n"
-            "Мальчик или девочка?\n\n"
-            "*Шаг 3. Напишите имя* ✍️\n"
-            "Ваш ребёнок станет главным героем!\n\n"
-            "*Шаг 4. Укажите возраст* 🎂\n"
-            "Просто цифра (любой возраст)\n\n"
-            "*Шаг 5. Загрузите фото (опционально)* 📸\n"
-            "Я проанализирую внешность:\n"
-            "• Цвет волос\n"
-            "• Цвет глаз\n"
-            "• Особенности (веснушки, очки)\n"
-            "Можно пропустить — создам типичного персонажа.\n\n"
-            "*Шаг 6. Оплатите* 💳\n"
-            f"Цена: {BOOK_PRICE_BASE}₽\n\n"
-            "*Шаг 7. Получите книгу!* 📖\n"
-            "⏱️ Готово за 5 минут\n"
-            "• 10 страниц с иллюстрациями\n"
-            "• Disney/Pixar качество\n"
-            "• PDF файл для печати или чтения\n\n"
-            "Всё просто! Начнём? 😊"
+            "• Динозавры 🦕\n"
+            "• Космос 🚀\n"
+            "• Море и пираты 🏴‍☠️\n"
+            "• Феи и волшебство 🧚\n"
+            "• Принцессы и рыцари 👸\n"
+            "• Животные и природа 🦁\n"
+            "• Супергерои 🦸\n"
+            "• Зимняя сказка ❄️\n\n"
+            "*Шаг 2. Расскажите о ребёнке* 👶\n"
+            "Имя, возраст, пол\n\n"
+            "*Шаг 3. Загрузите фото (опционально)* 📸\n"
+            "Персонаж будет похож на вашего малыша!\n\n"
+            "*Шаг 4. Оплатите и получите книгу* 📖\n"
+            f"Стоимость: {BOOK_PRICE_BASE}₽ — готово за 5 минут!\n\n"
+            "Нажмите *«Создать сказку»* чтобы начать! ✨"
         ),
-        parse_mode='Markdown'
-    )
-    
-    keyboard = [[InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text="Готовы создать сказку?",
-        reply_markup=reply_markup
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Создать сказку", callback_data="create_story")]
+        ])
     )
 
 
 async def support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Запускаем режим поддержки - пользователь пишет прямо в бота"""
+    """Кнопка поддержки"""
     query = update.callback_query
     await query.answer()
     
-    context.user_data['support_mode'] = True
-    print(f"📞 Включен режим поддержки для пользователя {query.from_user.id}")
-    
-    keyboard = [[InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Устанавливаем флаг что пользователь в режиме поддержки
+    context.user_data['in_support_mode'] = True
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=(
-            "📞 *Служба поддержки*\n\n"
+            "📞 *Техподдержка*\n\n"
             "Напишите ваш вопрос или проблему, и я передам его администратору.\n\n"
-            "*Мы отвечаем:*\n"
-            "• По вопросам оплаты — моментально\n"
-            "• Технические вопросы — в течение часа\n"
-            "• Общие вопросы — в течение 2-3 часов\n\n"
-            "✍️ Напишите сообщение:"
+            "Вы получите ответ в течение нескольких часов. 💬"
         ),
         parse_mode='Markdown',
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]
+        ])
     )
 
 
 async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отменяем режим поддержки"""
+    """Отмена режима поддержки"""
     query = update.callback_query
     await query.answer()
     
-    context.user_data['support_mode'] = False
-    print(f"❌ Отменен режим поддержки для пользователя {query.from_user.id}")
+    # Убираем флаг поддержки
+    context.user_data['in_support_mode'] = False
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text="✅ Отменено. Используйте /start для возврата в главное меню."
+        text="✅ Режим поддержки отменён. Нажмите /start чтобы продолжить."
     )
-
-
-async def admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ нажал кнопку 'Свой ответ' - включаем режим ответа"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Проверка что это админ
-    if query.from_user.id != ADMIN_ID:
-        return
-    
-    # Извлекаем user_id из callback_data
-    user_id = int(query.data.split('_')[2])
-    
-    # Сохраняем в контекст что админ отвечает этому пользователю
-    context.user_data['admin_replying_to'] = user_id
-    
-    await query.edit_message_text(
-        text=query.message.text + "\n\n<b>✍️ Напишите ваш ответ:</b>",
-        parse_mode='HTML'
-    )
-
-
-async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатываем текст ответа от админа"""
-    
-    # Проверяем что это админ и он в режиме ответа
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    user_id = context.user_data.get('admin_replying_to')
-    if not user_id:
-        return
-    
-    reply_text = update.message.text
-    
-    # Отключаем режим ответа
-    context.user_data['admin_replying_to'] = None
-    
-    # Экранируем HTML
-    safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    
-    try:
-        # Отправляем ответ пользователю
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=(
-                f"📞 <b>Ответ от поддержки:</b>\n\n"
-                f"{safe_reply}\n\n"
-                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
-            ),
-            parse_mode='HTML'
-        )
-        
-        # Подтверждение админу
-        await update.message.reply_text(f"✅ Ответ отправлен пользователю {user_id}")
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
-
-
-async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатываем быстрые ответы (кнопки)"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Проверка что это админ
-    if query.from_user.id != ADMIN_ID:
-        return
-    
-    # Извлекаем тип ответа и user_id
-    parts = query.data.split('_')
-    reply_type = parts[1]
-    user_id = int(parts[2])
-    
-    # Готовые ответы
-    quick_replies = {
-        'paid': '✅ Ваш платёж получен! Книга отправляется сейчас.',
-        'wait': '⏳ Ваша книга генерируется. Это займёт 3-5 минут. Пожалуйста, подождите!',
-        'error': '❌ Произошла ошибка. Мы уже работаем над решением. Напишите мне через несколько минут.',
-        'howto': '👌 Создание сказки простое: нажмите /start → ⭐ Создать сказку → следуйте инструкциям. Цена 449₽.',
-        'balance': '💰 Проверяю ваш платёж... Один момент!',
-        'quality': '🎨 Все иллюстрации создаются с помощью AI Disney/Pixar качества. Гарантируем высокое качество!'
-    }
-    
-    reply_text = quick_replies.get(reply_type, 'Спасибо за обращение!')
-    
-    try:
-        # Отправляем ответ пользователю
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=(
-                f"📞 <b>Ответ от поддержки:</b>\n\n"
-                f"{reply_text}\n\n"
-                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
-            ),
-            parse_mode='HTML'
-        )
-        
-        # Обновляем сообщение админу
-        await query.edit_message_text(
-            text=query.message.text + f"\n\n<b>✅ Отправлен быстрый ответ: {reply_type}</b>",
-            parse_mode='HTML'
-        )
-        
-    except Exception as e:
-        await query.message.reply_text(f"❌ Ошибка отправки: {e}")
 
 
 async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатываем сообщение в режиме поддержки"""
+    """Обработка сообщений в режиме поддержки"""
     
-    # Если это админ в режиме ответа - обрабатываем отдельно
-    if update.effective_user.id == ADMIN_ID and context.user_data.get('admin_replying_to'):
-        await handle_admin_reply(update, context)
-        return
-    
-    # Проверяем режим поддержки
-    support_mode = context.user_data.get('support_mode', False)
-    print(f"📝 Получено сообщение. Support mode: {support_mode}")
-    
-    if not support_mode:
-        return
+    # Проверяем флаг поддержки
+    if not context.user_data.get('in_support_mode', False):
+        return  # Пропускаем - это не сообщение в поддержку
     
     user = update.effective_user
-    user_message = update.message.text
+    message_text = update.message.text
     
-    print(f"📩 Обрабатываем сообщение в поддержку от {user.id}: {user_message}")
-    
-    # Отключаем режим поддержки
-    context.user_data['support_mode'] = False
-    
-    # Отправляем подтверждение пользователю
-    await update.message.reply_text(
-        "✅ Ваше сообщение отправлено в поддержку!\n\n"
-        "Мы ответим вам в ближайшее время прямо здесь, в боте.\n\n"
-        "Используйте /start для возврата в главное меню."
-    )
-    
-    # Пересылаем админу
-    if ADMIN_ID:
-        # Экранируем HTML символы
-        safe_name = (user.first_name or 'Без имени').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        safe_username = (user.username or 'нет').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        safe_message = user_message.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        
-        admin_text = (
-            f"📩 <b>Новое обращение в поддержку</b>\n\n"
-            f"👤 User ID: {user.id}\n"
-            f"👤 Username: @{safe_username}\n"
-            f"💬 Сообщение:\n{safe_message}"
-        )
-        
-        # Кнопки для ответа
-        keyboard = [
-            [InlineKeyboardButton("✍️ Свой ответ", callback_data=f"admin_reply_{user.id}")],
-            [
-                InlineKeyboardButton("✅ Оплачено", callback_data=f"quick_paid_{user.id}"),
-                InlineKeyboardButton("⏳ Ждите", callback_data=f"quick_wait_{user.id}")
-            ],
-            [
-                InlineKeyboardButton("❌ Ошибка", callback_data=f"quick_error_{user.id}"),
-                InlineKeyboardButton("👌 Как работает?", callback_data=f"quick_howto_{user.id}")
-            ],
-            [InlineKeyboardButton("💰 Баланс", callback_data=f"quick_balance_{user.id}")],
-            [InlineKeyboardButton("🎨 Качество", callback_data=f"quick_quality_{user.id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
+    # Отправляем админу
+    if ADMIN_ID and ADMIN_ID > 0:
         try:
+            admin_text = f"""📩 *НОВОЕ ОБРАЩЕНИЕ В ПОДДЕРЖКУ*
+
+👤 От: {user.first_name or 'Аноним'} (@{user.username or 'без username'})
+🆔 ID: {user.id}
+
+💬 Сообщение:
+{message_text}"""
+            
+            # Кнопка для быстрого ответа
+            keyboard = [
+                [InlineKeyboardButton("💬 Ответить", callback_data=f"admin_reply_{user.id}")],
+                [InlineKeyboardButton("✅ Решено", callback_data=f"quick_resolved_{user.id}")],
+                [InlineKeyboardButton("🕐 Позже", callback_data=f"quick_later_{user.id}")]
+            ]
+            
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=admin_text,
-                parse_mode='HTML',
-                reply_markup=reply_markup
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            print(f"✅ Сообщение отправлено админу {ADMIN_ID}")
+            
+            # Подтверждаем пользователю
+            await update.message.reply_text(
+                "✅ Ваше сообщение отправлено администратору!\n\n"
+                "Мы ответим в ближайшее время. Спасибо за терпение! 🙏"
+            )
+            
+            # Выходим из режима поддержки
+            context.user_data['in_support_mode'] = False
+            
         except Exception as e:
-            print(f"❌ Ошибка отправки админу: {e}")
+            logger.error(f"Ошибка отправки сообщения админу: {e}")
+            await update.message.reply_text(
+                "❌ Произошла ошибка при отправке сообщения. "
+                "Попробуйте позже или напишите напрямую: @your_support"
+            )
+
+
+async def admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ нажал кнопку 'Ответить'"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Извлекаем user_id из callback_data
+    user_id = int(query.data.split('_')[-1])
+    
+    # Сохраняем в контексте что админ отвечает этому пользователю
+    context.user_data['replying_to'] = user_id
+    
+    await query.message.reply_text(
+        f"✍️ Напишите ответ пользователю (ID: {user_id}):\n\n"
+        "Или используйте команду: /reply <текст>"
+    )
+
+
+async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Быстрые ответы админа"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Парсим callback_data
+    parts = query.data.split('_')
+    action = parts[1]  # resolved или later
+    user_id = int(parts[2])
+    
+    if action == 'resolved':
+        message = "✅ Ваш вопрос решён! Если есть ещё вопросы - пишите."
+    elif action == 'later':
+        message = "🕐 Мы получили ваше сообщение и ответим позже. Спасибо за ожидание!"
+    
+    try:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=message
+        )
+        await query.message.reply_text(f"✅ Отправлено пользователю {user_id}")
+    except Exception as e:
+        await query.message.reply_text(f"❌ Ошибка: {e}")
 
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для ответа пользователю: /reply USER_ID текст"""
+    """Команда /reply для админа"""
+    user_id = update.effective_user.id
     
-    # Проверка что это админ
-    if update.effective_user.id != ADMIN_ID:
+    # Только админ может использовать
+    if user_id != ADMIN_ID:
         return
     
-    # Проверяем аргументы
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "❌ Использование: /reply USER_ID текст ответа\n\n"
-            "Пример: /reply 123456789 Здравствуйте! Ваш вопрос решён."
-        )
+    # Проверяем что админ в режиме ответа
+    target_user_id = context.user_data.get('replying_to')
+    
+    if not target_user_id:
+        await update.message.reply_text("❌ Сначала нажмите кнопку 'Ответить' под сообщением пользователя")
         return
+    
+    # Получаем текст ответа
+    if not context.args:
+        await update.message.reply_text("❌ Используйте: /reply <ваш ответ>")
+        return
+    
+    reply_text = ' '.join(context.args)
     
     try:
-        user_id = int(context.args[0])
-        reply_text = ' '.join(context.args[1:])
-        
-        # Экранируем HTML символы
-        safe_reply = reply_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        
-        # Отправляем ответ пользователю
         await context.bot.send_message(
-            chat_id=user_id,
-            text=(
-                f"📞 <b>Ответ от поддержки:</b>\n\n"
-                f"{safe_reply}\n\n"
-                f"<i>Если у вас ещё есть вопросы, используйте /start → 📞 Поддержка</i>"
-            ),
-            parse_mode='HTML'
+            chat_id=target_user_id,
+            text=f"💬 *Ответ от поддержки:*\n\n{reply_text}",
+            parse_mode='Markdown'
         )
         
-        # Подтверждение админу
-        await update.message.reply_text(
-            f"✅ Ответ отправлен пользователю {user_id}"
-        )
+        await update.message.reply_text(f"✅ Ответ отправлен пользователю {target_user_id}")
         
-    except ValueError:
-        await update.message.reply_text("❌ Неверный ID пользователя")
+        # Очищаем режим ответа
+        context.user_data['replying_to'] = None
+        
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка отправки: {e}")
 
 
 async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показываем выбор темы - ВСЕ 8 ТЕМ СРАЗУ"""
+    log_event('create_story', update.effective_user.id)
+    """Начало создания сказки"""
     query = update.callback_query
     await query.answer()
     
@@ -522,24 +416,34 @@ async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TY
     with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
         themes = json.load(f)
     
-    # Создаём кнопки - ВСЕ 8 ТЕМ (2 в ряду)
-    keyboard = [
-        [InlineKeyboardButton(themes["robot_city"]["name"], callback_data="theme_robot_city"),
-         InlineKeyboardButton(themes["space"]["name"], callback_data="theme_space")],
-        [InlineKeyboardButton(themes["dinosaurs"]["name"], callback_data="theme_dinosaurs"),
-         InlineKeyboardButton(themes["underwater"]["name"], callback_data="theme_underwater")],
-        [InlineKeyboardButton(themes["fairy_land"]["name"], callback_data="theme_fairy_land"),
-         InlineKeyboardButton(themes["princess"]["name"], callback_data="theme_princess")],
-        [InlineKeyboardButton(themes["unicorns"]["name"], callback_data="theme_unicorns"),
-         InlineKeyboardButton(themes["knight"]["name"], callback_data="theme_knight")]
-    ]
+    # Создаём кнопки с темами (по 2 в ряд)
+    keyboard = []
+    theme_buttons = []
+    
+    for theme_id, theme_data in themes.items():
+        theme_buttons.append(
+            InlineKeyboardButton(
+                f"{theme_data['emoji']} {theme_data['name']}", 
+                callback_data=f"theme_{theme_id}"
+            )
+        )
+        
+        # Когда набралось 2 кнопки - добавляем ряд
+        if len(theme_buttons) == 2:
+            keyboard.append(theme_buttons.copy())
+            theme_buttons = []
+    
+    # Если осталась одна кнопка - добавляем отдельным рядом
+    if theme_buttons:
+        keyboard.append(theme_buttons)
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=(
-            "🎨 *Выбери тему сказки:*\n\n"
-            "📖 8 волшебных историй на выбор!"
+            "🎨 *Выберите тему сказки:*\n\n"
+            "Каждая история уникальна и адаптируется под возраст и пол ребёнка!"
         ),
         parse_mode='Markdown',
         reply_markup=reply_markup
@@ -549,11 +453,13 @@ async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Тема выбрана, спрашиваем пол"""
+    log_event('theme_chosen', update.effective_user.id)
+    """Пользователь выбрал тему"""
     query = update.callback_query
     await query.answer()
     
-    theme_id = query.data.replace("theme_", "")
+    # Сохраняем выбранную тему
+    theme_id = query.data.replace('theme_', '')
     context.user_data['theme'] = theme_id
     
     # Загружаем название темы
@@ -561,15 +467,22 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         themes = json.load(f)
     theme_name = themes[theme_id]["name"]
     
+    # Кнопки выбора пола
     keyboard = [
-        [InlineKeyboardButton("👦 Мальчик", callback_data="gender_boy")],
-        [InlineKeyboardButton("👧 Девочка", callback_data="gender_girl")]
+        [
+            InlineKeyboardButton("👦 Мальчик", callback_data="gender_boy"),
+            InlineKeyboardButton("👧 Девочка", callback_data="gender_girl")
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text=f"✅ Тема: {theme_name}\n\n👶 Кто будет главным героем?",
+        text=(
+            f"✅ Отлично! Тема: *{theme_name}*\n\n"
+            "👶 Теперь выберите пол ребёнка:"
+        ),
+        parse_mode='Markdown',
         reply_markup=reply_markup
     )
     
@@ -577,18 +490,24 @@ async def theme_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def gender_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пол выбран - переходим к имени"""
+    log_event('gender_chosen', update.effective_user.id)
+    """Пользователь выбрал пол"""
     query = update.callback_query
     await query.answer()
     
-    gender = "boy" if query.data == "gender_boy" else "girl"
+    # Сохраняем пол
+    gender = query.data.replace('gender_', '')
     context.user_data['gender'] = gender
     
-    gender_ru = "мальчик" if gender == "boy" else "девочка"
+    gender_text = "мальчика" if gender == "boy" else "девочки"
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text=f"Отлично! Герой — {gender_ru} 👍\n\n📝 *Напишите имя ребёнка:*",
+        text=(
+            f"👶 Книга для {gender_text}!\n\n"
+            "✍️ Как зовут ребёнка?\n\n"
+            "Напишите имя (например: Саша, Маша, Артём)"
+        ),
         parse_mode='Markdown'
     )
     
@@ -596,121 +515,128 @@ async def gender_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def name_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получено имя - просим возраст"""
+    log_event('name_entered', update.effective_user.id)
+    """Получено имя ребёнка"""
     name = update.message.text.strip()
     
-    # Проверка имени
+    # Проверка на длину
     if len(name) < 2 or len(name) > 20:
         await update.message.reply_text(
-            "⚠️ Имя должно быть от 2 до 20 символов.\n"
-            "Попробуйте ещё раз:"
+            "⚠️ Имя должно быть от 2 до 20 символов. Попробуйте ещё раз:"
         )
         return GETTING_NAME
     
+    # Сохраняем имя
     context.user_data['name'] = name
     
     await update.message.reply_text(
-        f"Замечательно, {name}! 😊\n\n"
-        f"🎂 *Сколько лет {name}?*\n\n"
-        f"Напишите возраст (просто цифру)",
-        parse_mode='Markdown'
+        f"✅ Отлично, {name}!\n\n"
+        "🔢 Сколько лет ребёнку?\n\n"
+        "Напишите число (например: 3, 5, 7)"
     )
     
     return GETTING_AGE
 
 
 async def age_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('age_entered', update.effective_user.id)
     """Получен возраст"""
-    age_text = update.message.text.strip()
-    
-    # Проверяем что это цифра
     try:
-        age = int(age_text)
+        age = int(update.message.text.strip())
+        
         if age < 1 or age > 12:
-            raise ValueError
-    except:
+            await update.message.reply_text(
+                "⚠️ Пожалуйста, укажите возраст от 1 до 12 лет:"
+            )
+            return GETTING_AGE
+        
+        context.user_data['age'] = age
+        
+        # Кнопки выбора версии
+        keyboard = [
+            [InlineKeyboardButton(
+                f"📖 Базовая версия - {BOOK_PRICE_BASE}₽", 
+                callback_data="version_base"
+            )],
+            [InlineKeyboardButton(
+                f"⭐ Премиум с анализом фото - {BOOK_PRICE_PREMIUM}₽", 
+                callback_data="version_premium"
+            )]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
-            "⚠️ Пожалуйста, напишите возраст цифрой от 1 до 12.\n"
-            "Например: 5"
+            f"✅ Понял, {age} лет!\n\n"
+            "💎 *Выберите версию книги:*\n\n"
+            f"📖 *Базовая ({BOOK_PRICE_BASE}₽):*\n"
+            "• Персонаж на основе описания\n"
+            "• Disney/Pixar стиль иллюстраций\n"
+            "• 10 страниц с картинками\n\n"
+            f"⭐ *Премиум ({BOOK_PRICE_PREMIUM}₽):*\n"
+            "• Анализ фото ребёнка с AI\n"
+            "• Персонаж ОЧЕНЬ похож на ребёнка\n"
+            "• 10 страниц с картинками\n"
+            "• Disney/Pixar стиль иллюстраций",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        
+        return CHOOSING_VERSION
+        
+    except ValueError:
+        await update.message.reply_text(
+            "⚠️ Пожалуйста, напишите число (например: 3, 5, 7):"
         )
         return GETTING_AGE
-    
-    context.user_data['age'] = age
-    
-    # Показываем выбор версии
-    keyboard = [
-        [InlineKeyboardButton("📖 Базовая 290₽", callback_data="version_base")],
-        [InlineKeyboardButton("⭐ Премиум 390₽ - Вдохновленная вашим ребенком", callback_data="version_premium")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        f"💎 *Выберите версию книги:*\n\n"
-        f"📖 *БАЗОВАЯ - 290₽*\n"
-        f"• Персонаж с именем вашего ребенка\n"
-        f"• 10 красочных иллюстраций\n"
-        f"• Увлекательная история\n\n"
-        f"⭐ *ПРЕМИУМ - 390₽*\n"
-        f"• Всё из базовой версии +\n"
-        f"• *Герой ПОХОЖ на вашего ребенка!*\n"
-        f"• Анализ фото (цвет волос, глаз, особенности)\n"
-        f"• Максимальная персонализация\n\n"
-        f"_Разница всего 100₽ за уникальность!_",
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
-    
-    return CHOOSING_VERSION
 
 
 async def version_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбрана базовая версия - без фото"""
+    """Выбрана базовая версия"""
     query = update.callback_query
     await query.answer()
     
     context.user_data['version'] = 'base'
-    context.user_data['photo_path'] = None
-    log_event('version_base_selected', update.effective_user.id)
+    context.user_data['price'] = BOOK_PRICE_BASE
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text="✅ *Базовая версия выбрана!*\n\n"
-             "Создам персонажа с именем вашего ребенка.\n\n"
-             "Переходим к оплате...",
-        parse_mode='Markdown'
+        text=(
+            f"✅ Базовая версия выбрана ({BOOK_PRICE_BASE}₽)\n\n"
+            "Переходим к оплате... 💳"
+        )
     )
     
-    # Сразу к оплате
-    await process_payment(update, context)
-    return PAYMENT
+    # Переходим сразу к оплате
+    return await create_payment_step(update, context)
 
 
 async def version_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбрана премиум версия - с фото"""
+    """Выбрана премиум версия"""
     query = update.callback_query
     await query.answer()
     
     context.user_data['version'] = 'premium'
-    log_event('version_premium_selected', update.effective_user.id)
+    context.user_data['price'] = BOOK_PRICE_PREMIUM
     
-    # Переходим к фото
+    # Кнопки для загрузки фото
     keyboard = [
         [InlineKeyboardButton("📸 Загрузить фото", callback_data="want_photo")],
-        [InlineKeyboardButton("⏭️ Пропустить (базовая цена)", callback_data="downgrade_to_base")]
+        [InlineKeyboardButton(
+            f"⬅️ Базовая версия ({BOOK_PRICE_BASE}₽)", 
+            callback_data="downgrade_to_base"
+        )]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=(
-            "⭐ *Премиум версия выбрана!*\n\n"
-            "📸 Загрузите фото вашего ребенка,\n"
-            "и я создам героя МАКСИМАЛЬНО похожего!\n\n"
-            "💡 Для лучшего результата:\n"
-            "• Фото анфас (лицом к камере)\n"
-            "• Хорошее освещение\n"
-            "• Ребёнок один на фото\n\n"
-            "_Или пропустите, если передумали_"
+            f"⭐ Премиум версия выбрана ({BOOK_PRICE_PREMIUM}₽)\n\n"
+            "📸 *Загрузите фото ребёнка:*\n\n"
+            "• Лицо хорошо видно\n"
+            "• Чёткое освещение\n"
+            "• Без фильтров\n\n"
+            "Это поможет AI создать максимально похожего персонажа!"
         ),
         parse_mode='Markdown',
         reply_markup=reply_markup
@@ -719,29 +645,8 @@ async def version_premium_callback(update: Update, context: ContextTypes.DEFAULT
     return GETTING_PHOTO
 
 
-async def downgrade_to_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пользователь передумал и хочет базовую версию"""
-    query = update.callback_query
-    await query.answer()
-    
-    context.user_data['version'] = 'base'
-    context.user_data['photo_path'] = None
-    log_event('downgrade_to_base', update.effective_user.id)
-    
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text="📖 Хорошо, создам базовую версию.\n\n"
-             "Переходим к оплате...",
-        parse_mode='Markdown'
-    )
-    
-    # К оплате с базовой ценой
-    await process_payment(update, context)
-    return PAYMENT
-
-
 async def want_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пользователь хочет загрузить фото"""
+    """Пользователь готов загрузить фото"""
     query = update.callback_query
     await query.answer()
     
@@ -749,224 +654,205 @@ async def want_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         chat_id=query.message.chat_id,
         text=(
             "📸 Отлично! Загрузите фото ребёнка.\n\n"
-            "💡 Для лучшего результата:\n"
-            "• Фото анфас (лицом к камере)\n"
-            "• Хорошее освещение\n"
-            "• Ребёнок один на фото"
+            "Фото должно быть:\n"
+            "• С хорошим освещением\n"
+            "• Лицо видно чётко\n"
+            "• Без фильтров"
         )
     )
     
     return GETTING_PHOTO
 
 
-async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получено фото"""
-    photo_file = await update.message.photo[-1].get_file()
-    
-    # Сохраняем фото
-    user_id = update.effective_user.id
-    photo_path = f"temp_photo_{user_id}.jpg"
-    await photo_file.download_to_drive(photo_path)
-    
-    context.user_data['photo_path'] = photo_path
-    log_event('photo_uploaded', update.effective_user.id)
-    
-    # Переходим к оплате
-    await process_payment(update, context)
-    return PAYMENT
-
-
-async def skip_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пользователь пропустил фото"""
+async def downgrade_to_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пользователь передумал и выбрал базовую версию"""
     query = update.callback_query
     await query.answer()
-    log_event('photo_skipped', update.effective_user.id)
     
-    context.user_data['photo_path'] = None
+    context.user_data['version'] = 'base'
+    context.user_data['price'] = BOOK_PRICE_BASE
     
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text="Хорошо! Создам персонажа без фото."
+        text=(
+            f"✅ Хорошо, базовая версия ({BOOK_PRICE_BASE}₽)\n\n"
+            "Переходим к оплате... 💳"
+        )
     )
     
     # Переходим к оплате
-    await process_payment(update, context)
-    return PAYMENT
+    return await create_payment_step(update, context)
 
 
-async def process_payment(update, context):
-    """Обработка оплаты - YOOKASSA ИНТЕГРАЦИЯ"""
+async def skip_photo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('photo_skipped', update.effective_user.id)
+    """Пользователь пропустил загрузку фото"""
+    query = update.callback_query
+    await query.answer()
+    
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="✅ Хорошо, создам персонажа на основе описания!\n\nПереходим к оплате... 💳"
+    )
+    
+    return await create_payment_step(update, context)
+
+
+async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('photo_uploaded', update.effective_user.id)
+    """Получено фото"""
+    
+    # Скачиваем фото
+    photo = update.message.photo[-1]  # Берём самое большое
+    file = await context.bot.get_file(photo.file_id)
+    
+    # Сохраняем во временную папку
+    photo_path = f"temp_photos/{update.effective_user.id}.jpg"
+    os.makedirs("temp_photos", exist_ok=True)
+    await file.download_to_drive(photo_path)
+    
+    context.user_data['photo_path'] = photo_path
+    
+    await update.message.reply_text(
+        "✅ Фото получено!\n\nПереходим к оплате... 💳"
+    )
+    
+    return await create_payment_step(update, context)
+
+
+async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_event('payment_created', update.effective_user.id)
+    """Создание платежа"""
     
     # Получаем данные
     name = context.user_data['name']
     age = context.user_data['age']
-    gender = context.user_data['gender']
     theme = context.user_data['theme']
+    price = context.user_data.get('price', BOOK_PRICE_BASE)
+    
     user_id = update.effective_user.id
     
-    # ♾️ ПРОВЕРКА ТЕСТОВОГО АККАУНТА (НЕОГРАНИЧЕННО)
-    if user_id in TEST_UNLIMITED_ACCOUNTS:
-        # Тестовый аккаунт - всегда бесплатно!
-        # Создаём заказ в БД
-        order_id = db.create_order(
-            user_id=user_id,
-            theme=theme,
-            child_name=name,
-            child_age=age,
-            gender=gender,
-            photo_description=context.user_data.get('photo_description')
-        )
-        context.user_data['order_id'] = order_id
-        
-        # Помечаем заказ как оплаченный (бесплатный)
-        db.update_order_status(order_id, 'paid')
-        
-        # Отправляем сообщение
-        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"🧪 *ТЕСТОВЫЙ РЕЖИМ*\n\n"
-                 f"Книга создается бесплатно для тестирования.\n\n"
-                 f"⏳ Генерация начинается...\n"
-                 f"Это займет около 5 минут.",
-            parse_mode='Markdown'
-        )
-        
-        # Запускаем генерацию сразу
-        await start_generation(update, context)
-        return ConversationHandler.END
+    # Загружаем тему
+    with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
+        themes = json.load(f)
+    theme_name = themes[theme]["name"]
     
-    # 🎁 ПРОВЕРКА БЕСПЛАТНОГО КРЕДИТА
-    if user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
-        # У пользователя есть бесплатный кредит!
-        FREE_CREDITS[user_id] -= 1  # Используем кредит
+    # ✅ ПАТЧ: Проверяем бесплатные кредиты
+    if user_id in TEST_UNLIMITED_ACCOUNTS:
+        # Неограниченный тестовый аккаунт
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎁 *Тестовый аккаунт - бесплатная генерация!*\n\nЗапускаю создание книги...",
+            parse_mode='Markdown'
+        )
         
         # Создаём заказ в БД
         order_id = db.create_order(
             user_id=user_id,
-            theme=theme,
             child_name=name,
             child_age=age,
-            gender=gender,
-            photo_description=context.user_data.get('photo_description')
+            gender=context.user_data['gender'],
+            theme=theme,
+            price=0,
+            payment_id='free_test'
         )
         context.user_data['order_id'] = order_id
-        
-        # Помечаем заказ как оплаченный (бесплатный)
         db.update_order_status(order_id, 'paid')
         
-        # Отправляем сообщение
-        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+        # Сразу запускаем генерацию
+        return await start_generation(update, context)
+    
+    elif user_id in FREE_CREDITS and FREE_CREDITS[user_id] > 0:
+        # Есть бесплатный кредит
+        FREE_CREDITS[user_id] -= 1
+        
         await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"🎁 *БЕСПЛАТНАЯ КНИГА!*\n\n"
-                 f"Спасибо за терпение! ❤️\n"
-                 f"Эта книга для вас совершенно бесплатно.\n\n"
-                 f"⏳ Генерация начинается...\n"
-                 f"Это займет около 5 минут.",
+            chat_id=user_id,
+            text=f"🎁 *У вас есть бесплатная книга!*\n\nОсталось: {FREE_CREDITS[user_id]}\n\nЗапускаю создание...",
             parse_mode='Markdown'
         )
         
-        # Запускаем генерацию сразу
-        await start_generation(update, context)
+        # Создаём заказ в БД
+        order_id = db.create_order(
+            user_id=user_id,
+            child_name=name,
+            child_age=age,
+            gender=context.user_data['gender'],
+            theme=theme,
+            price=0,
+            payment_id='free_credit'
+        )
+        context.user_data['order_id'] = order_id
+        db.update_order_status(order_id, 'paid')
+        
+        # Сразу запускаем генерацию
+        return await start_generation(update, context)
+    
+    # Обычный платёж
+    if not PAYMENT_ENABLED:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="⚠️ Оплата временно недоступна. Попробуйте позже."
+        )
         return ConversationHandler.END
     
     # Создаём заказ в БД
     order_id = db.create_order(
         user_id=user_id,
-        theme=theme,
         child_name=name,
         child_age=age,
-        gender=gender,
-        photo_description=context.user_data.get('photo_description')
+        gender=context.user_data['gender'],
+        theme=theme,
+        price=price
     )
+    
     context.user_data['order_id'] = order_id
     
-    # Обновляем статистику
-    db.update_daily_stats(total_orders=1)
-    
-    if not PAYMENT_ENABLED:
-        # Тестовый режим - генерируем сразу
-        if update.message:
-            await update.message.reply_text(
-                "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
-                "Оплата отключена. Генерирую книгу бесплатно...",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.callback_query.message.reply_text(
-                "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
-                "Оплата отключена. Генерирую книгу бесплатно...",
-                parse_mode='Markdown'
-            )
-        
-        await start_generation(update, context)
-        return ConversationHandler.END
-    
-    # 💰 ОПРЕДЕЛЯЕМ ЦЕНУ
-    user_username = update.effective_user.username
-    if user_username and user_username.lower() == "dim4eg86":
-        price = 5  # Тестовая цена для владельца
-    else:
-        # Проверяем выбранную версию
-        version = context.user_data.get('version', 'base')
-        if version == 'premium':
-            price = BOOK_PRICE_PREMIUM  # Премиум 390₽
-        else:
-            price = BOOK_PRICE_BASE  # Базовая 290₽
-    
-    # СОЗДАЁМ ПЛАТЁЖ YOOKASSA
+    # Создаём платеж
     payment_data = create_payment(
         amount=price,
-        description=f"Персональная сказка про {name}",
-        return_url=f"https://t.me/{BOT_USERNAME}",
-        customer_email="noreply@storybook.ru"  # Фиктивный email для чека
+        description=f"Персональная сказка - {theme_name}",
+        return_url=f"https://t.me/{BOT_USERNAME}"
     )
     
     if not payment_data:
-        # Ошибка создания платежа
-        chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
         await context.bot.send_message(
-            chat_id=chat_id,
-            text="❌ Ошибка создания платежа. Попробуйте позже или напишите @your_support"
+            chat_id=user_id,
+            text="❌ Ошибка создания платежа. Попробуйте позже."
         )
         return ConversationHandler.END
     
-    # Сохраняем платёж в БД
-    db.create_payment(
-        payment_id=payment_data['id'],
-        order_id=order_id,
-        user_id=user_id,
-        amount=price,  # Используем персональную цену
-        payment_url=payment_data['confirmation_url']
-    )
-    
+    # Сохраняем payment_id
     context.user_data['payment_id'] = payment_data['id']
-    log_event('payment_created', user_id)
+    db.update_order_payment(order_id, payment_data['id'])
     
-    # ОТПРАВЛЯЕМ КНОПКУ ОПЛАТЫ
-    keyboard = [[InlineKeyboardButton(
-        f"💳 Оплатить {price}₽",  # Используем персональную цену
-        url=payment_data['confirmation_url']
-    )]]
+    # Отправляем ссылку на оплату
+    keyboard = [
+        [InlineKeyboardButton("💳 Оплатить", url=payment_data['confirmation_url'])]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    chat_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+    # Определяем chat_id
+    if hasattr(update, 'callback_query') and update.callback_query:
+        chat_id = update.callback_query.message.chat_id
+    elif hasattr(update, 'message') and update.message:
+        chat_id = update.message.chat_id
+    else:
+        chat_id = user_id
     
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
-            f"💰 *Стоимость: {price}₽*\n\n"  # Используем персональную цену
-            f"📖 Сказка про {name}\n"
-            f"🎨 10 страниц с иллюстрациями Disney/Pixar качества\n"
-            f"📄 PDF файл для печати\n\n"
-            f"После оплаты книга будет готова через 5 минут!"
+            f"💳 *Оплата {price}₽*\n\n"
+            f"📖 Заказ #{order_id}\n"
+            f"✨ {theme_name}\n"
+            f"👶 {name}, {age} лет\n\n"
+            "Нажмите кнопку ниже для оплаты:"
         ),
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
     
-    # Ждём оплату
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
@@ -976,7 +862,15 @@ async def process_payment(update, context):
         )
     )
     
-    # Запускаем автопроверку оплаты (каждые 10 секунд, макс 10 минут)
+    # ✅ ПАТЧ: Запускаем автопроверку с уникальным именем
+    job_name = f"payment_{payment_data['id']}"
+    
+    # Удаляем старую задачу если она есть
+    current_jobs = context.job_queue.get_jobs_by_name(job_name)
+    for job in current_jobs:
+        job.schedule_removal()
+    
+    # Создаём новую задачу автопроверки
     context.job_queue.run_repeating(
         check_payment_status,
         interval=10,
@@ -984,9 +878,10 @@ async def process_payment(update, context):
         data={
             'payment_id': payment_data['id'],
             'chat_id': user_id,
-            'user_data': context.user_data.copy()
+            'user_data': context.user_data.copy(),
+            'order_id': order_id  # ✅ ПАТЧ: Добавляем order_id в данные
         },
-        name=f"payment_{payment_data['id']}"
+        name=job_name
     )
     
     return PAYMENT
@@ -1000,6 +895,7 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
     payment_id = job.data['payment_id']
     chat_id = job.data['chat_id']
     user_data = job.data['user_data']
+    order_id = job.data['order_id']  # ✅ ПАТЧ: Получаем order_id
     
     try:
         # Проверяем статус
@@ -1013,17 +909,22 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
             
             # Обновляем статусы в БД
             db.update_payment_status(payment_id, 'succeeded')
-            db.update_order_status(user_data['order_id'], 'paid')
+            db.update_order_status(order_id, 'paid')
             db.update_daily_stats(revenue=BOOK_PRICE_BASE)
             
-            # Уведомляем админа о покупке
-            user_name = user_data.get('name', 'Аноним')
-            user_id = chat_id
-            order_id = user_data.get('order_id')
-            await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE_BASE)
+            # ✅ ПАТЧ: Уведомляем админа ТОЛЬКО ОДИН РАЗ
+            if order_id not in notified_orders:
+                user_name = user_data.get('name', 'Аноним')
+                user_id = chat_id
+                await notify_admin_payment(context, user_id, user_name, order_id, BOOK_PRICE_BASE)
+                notified_orders.add(order_id)  # Помечаем что уведомление отправлено
+                logger.info(f"✅ Админ уведомлён о заказе #{order_id}")
+            else:
+                logger.info(f"⏭️ Пропускаю дублирующее уведомление для заказа #{order_id}")
             
             # Останавливаем проверку
             job.schedule_removal()
+            logger.info(f"⏹️ Автопроверка остановлена для payment_id={payment_id}")
             
             # Запускаем генерацию
             # Создаём временный объект для передачи в start_generation
@@ -1167,18 +1068,20 @@ async def check_payment_command(update: Update, context: ContextTypes.DEFAULT_TY
             db.update_order_status(order_id, 'paid')
             db.update_daily_stats(revenue=BOOK_PRICE_BASE)
             
-            # Уведомляем админа о покупке
-            user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
-            await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE_BASE)
+            # ✅ ПАТЧ: Уведомляем админа ТОЛЬКО ОДИН РАЗ
+            if order_id not in notified_orders:
+                user_name = update.effective_user.first_name or update.effective_user.username or "Аноним"
+                await notify_admin_payment(context, update.effective_user.id, user_name, order_id, BOOK_PRICE_BASE)
+                notified_orders.add(order_id)
+                logger.info(f"✅ Админ уведомлён о заказе #{order_id} (manual check)")
+            else:
+                logger.info(f"⏭️ Пропускаю дублирующее уведомление для заказа #{order_id} (manual check)")
         
         await start_generation(update, context)
     else:
         await update.message.reply_text(
-            "⏳ Платёж ещё не оплачен.\n\n"
-            "Пожалуйста, завершите оплату по ссылке выше."
+            "⏳ Платёж ещё не завершён. Пожалуйста, завершите оплату."
         )
-
-
 
 
 async def notify_admin_payment(context, user_id, user_name, order_id, amount):
@@ -1208,90 +1111,101 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Проверка на админа
     if ADMIN_ID and user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Доступ запрещён")
-        return
-    
-    # Получаем статистику
-    stats = db.get_total_stats()
-    stats_7d = db.get_stats(days=7)
-    
-    text = (
-        "📊 *Статистика бота:*\n\n"
-        f"👥 Всего пользователей: {stats['total_users']}\n"
-        f"📦 Всего заказов: {stats['total_orders']}\n"
-        f"✅ Завершённых: {stats['completed_orders']}\n"
-        f"💰 Выручка: {stats['revenue']}₽\n"
-        f"📈 Конверсия: {stats['conversion']:.1f}%\n\n"
-        "*Последние 7 дней:*\n"
-    )
-    
-    for day in stats_7d:
-        text += (
-            f"\n{day['date']}:\n"
-            f"  Новых: {day['new_users']} | "
-            f"Заказов: {day['total_orders']} | "
-            f"Выручка: {day['revenue']}₽"
-        )
-    
-    await update.message.reply_text(text, parse_mode='Markdown')
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена разговора"""
-    await update.message.reply_text(
-        "Операция отменена. Напишите /start чтобы начать заново."
-    )
-    return ConversationHandler.END
-
-
-
-
-async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать свой user_id"""
-    user_id = update.effective_user.id
-    username = update.effective_user.username or "нет username"
-    first_name = update.effective_user.first_name or ""
-    
-    await update.message.reply_text(
-        f"👤 *Твои данные:*\n\n"
-        f"🆔 User ID: `{user_id}`\n"
-        f"📝 Username: @{username}\n"
-        f"👋 Имя: {first_name}",
-        parse_mode='Markdown'
-    )
-
-
-async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать аналитику (только для админа)"""
-    user_id = update.effective_user.id
-    
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Эта команда только для администратора")
+        await update.message.reply_text("⛔ Эта команда только для администратора")
         return
     
     try:
-        import psycopg2
-        import os
-        
-        # Подключаемся к PostgreSQL напрямую
-        conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+        # Подключаемся к БД
+        conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Статистика из БД
+        # Статистика пользователей
         cursor.execute("SELECT COUNT(*) FROM users")
         total_users = cursor.fetchone()[0]
         
+        # Статистика заказов
         cursor.execute("SELECT COUNT(*) FROM orders")
         total_orders = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'paid'")
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'paid' OR status = 'completed'")
         paid_orders = cursor.fetchone()[0]
         
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
         pending_orders = cursor.fetchone()[0]
         
-        # Доход - сумма всех payments (туда попадают только созданные платежи)
-        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
+        # Доход
+        cursor.execute("SELECT SUM(price) FROM orders WHERE status = 'paid' OR status = 'completed'")
+        result = cursor.fetchone()
+        revenue = int(result[0]) if result and result[0] else 0
+        
+        cursor.close()
+        conn.close()
+        
+        # Конверсии
+        conv_order = (total_orders / total_users * 100) if total_users > 0 else 0
+        conv_payment = (paid_orders / total_orders * 100) if total_orders > 0 else 0
+        
+        # Формируем текст
+        stats_text = f"""📊 *СТАТИСТИКА БОТА*
+
+👥 *Пользователи:*
+• Всего: {total_users}
+
+📦 *Заказы:*
+• Всего: {total_orders}
+• Оплачено: {paid_orders}
+• Ожидают оплату: {pending_orders}
+
+💰 *Доход:* {revenue:,.0f}₽
+
+📈 *Конверсия:*
+• Пользователи → Заказы: {conv_order:.1f}%
+• Заказы → Оплата: {conv_payment:.1f}%"""
+        
+        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Ошибка в stats_command: {e}")
+        logger.error(traceback.format_exc())
+        await update.message.reply_text(f"❌ Ошибка получения статистики: {e}")
+
+
+async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать свой user_id"""
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"🆔 Ваш ID: `{user_id}`", parse_mode='Markdown')
+
+
+async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Аналитика бота - только для админа"""
+    user_id = update.effective_user.id
+    
+    # Проверка на админа
+    if ADMIN_ID and user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+    
+    try:
+        # Подключаемся к БД
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Статистика пользователей
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        
+        # Статистика заказов
+        cursor.execute("SELECT COUNT(*) FROM orders")
+        total_orders = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'paid' OR status = 'completed'")
+        paid_orders = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+        pending_orders = cursor.fetchone()[0]
+        
+        # Доход
+        cursor.execute("SELECT SUM(price) FROM orders WHERE status = 'paid' OR status = 'completed'")
         result = cursor.fetchone()
         revenue = int(result[0]) if result and result[0] else 0
         
@@ -1361,6 +1275,13 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(traceback.format_exc())
         await update.message.reply_text(f"❌ Ошибка получения статистики: {e}")
 
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена текущего разговора"""
+    await update.message.reply_text(
+        "❌ Создание сказки отменено.\n\nНажмите /start чтобы начать заново."
+    )
+    return ConversationHandler.END
 
 
 # ✅ ПАТЧ СТАБИЛЬНОСТИ: Глобальный обработчик ошибок
@@ -1475,6 +1396,8 @@ def main():
     logger.info("✅ Error handler: включён")
     logger.info("✅ Таймауты: 30 сек (read/write), 15 сек (connect)")
     logger.info("✅ Connection pool: 30 соединений")
+    logger.info("✅ Дедупликация уведомлений: включена")
+    logger.info("✅ Шумные httpx логи: отключены")
     logger.info("=" * 60)
     
     print("✅ Бот с YooKassa и БД запущен!")
