@@ -754,12 +754,11 @@ async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Создаём заказ в БД
         order_id = db.create_order(
             user_id=user_id,
+            theme=theme,
             child_name=name,
             child_age=age,
             gender=context.user_data['gender'],
-            theme=theme,
-            price=0,
-            payment_id='free_test'
+            photo_description=context.user_data.get('photo_description')
         )
         context.user_data['order_id'] = order_id
         db.update_order_status(order_id, 'paid')
@@ -780,12 +779,11 @@ async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Создаём заказ в БД
         order_id = db.create_order(
             user_id=user_id,
+            theme=theme,
             child_name=name,
             child_age=age,
             gender=context.user_data['gender'],
-            theme=theme,
-            price=0,
-            payment_id='free_credit'
+            photo_description=context.user_data.get('photo_description')
         )
         context.user_data['order_id'] = order_id
         db.update_order_status(order_id, 'paid')
@@ -804,11 +802,11 @@ async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Создаём заказ в БД
     order_id = db.create_order(
         user_id=user_id,
+        theme=theme,
         child_name=name,
         child_age=age,
         gender=context.user_data['gender'],
-        theme=theme,
-        price=price
+        photo_description=context.user_data.get('photo_description')
     )
     
     context.user_data['order_id'] = order_id
