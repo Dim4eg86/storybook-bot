@@ -827,7 +827,15 @@ async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Сохраняем payment_id
     context.user_data['payment_id'] = payment_data['id']
-    db.update_order_payment(order_id, payment_data['id'])
+    
+    # Сохраняем платёж в БД
+    db.create_payment(
+        payment_id=payment_data['id'],
+        order_id=order_id,
+        user_id=user_id,
+        amount=price,
+        payment_url=payment_data['confirmation_url']
+    )
     
     # Отправляем ссылку на оплату
     keyboard = [
