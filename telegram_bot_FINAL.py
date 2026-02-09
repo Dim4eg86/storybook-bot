@@ -7,7 +7,7 @@ Telegram бот для персональных сказок - ИСПРАВЛЕ�
 ✅ Добавлена дедупликация уведомлений по order_id
 """
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
     CallbackQueryHandler, ContextTypes, filters, ConversationHandler
@@ -27,6 +27,15 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ✅ ПАТЧ: Постоянная клавиатура для удобства пользователей
+def get_main_keyboard():
+    """Возвращает постоянную клавиатуру с основными кнопками"""
+    keyboard = [
+        [KeyboardButton("🏠 Главное меню"), KeyboardButton("⭐ Создать сказку")],
+        [KeyboardButton("📚 Примеры"), KeyboardButton("📞 Поддержка")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 # Импортируем модули
 from generate_storybook_v2 import create_storybook_v2
@@ -117,6 +126,18 @@ def decline_name_accusative(name, gender):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало работы бота - КРАСИВОЕ ПРИВЕТСТВИЕ"""
     
+    # ✅ ПАТЧ: Останавливаем старые jobs проверки оплаты если есть
+    payment_id = context.user_data.get('payment_id')
+    if payment_id:
+        job_name = f"payment_{payment_id}"
+        current_jobs = context.job_queue.get_jobs_by_name(job_name)
+        for job in current_jobs:
+            job.schedule_removal()
+            logger.info(f"⏹️ Остановлен job проверки платежа {payment_id} при /start")
+    
+    # ✅ ПАТЧ: Очищаем user_data для нового флоу
+    context.user_data.clear()
+    
     # Регистрируем пользователя в БД
     user = update.effective_user
     db.add_user(user.id, user.username, user.first_name, user.last_name)
@@ -130,6 +151,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📞 Поддержка", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # ✅ ПАТЧ: Постоянная клавиатура внизу экрана
+    main_keyboard = get_main_keyboard()
     
     # Отправляем welcome картинку С КНОПКАМИ
     welcome_path = 'welcome.jpg'
@@ -152,8 +176,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "*Выберите действие:*"
                 ),
                 parse_mode='Markdown',
-                reply_markup=reply_markup
+                reply_markup=main_keyboard  # Постоянная клавиатура
             )
+        # Отправляем inline кнопки отдельным сообщением
+        await update.message.reply_text(
+            "👇 Или используйте кнопки ниже:",
+            reply_markup=reply_markup
+        )
     else:
         # Если нет картинки - просто текст с кнопками
         await update.message.reply_text(
@@ -170,8 +199,103 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⏱️ Готово за 5 минут\n\n"
             "*Выберите действие:*",
             parse_mode='Markdown',
+            reply_markup=main_keyboard  # Постоянная клавиатура
+        )
+        # Отправляем inline кнопки отдельным сообщением
+        await update.message.reply_text(
+            "👇 Или используйте кнопки ниже:",
             reply_markup=reply_markup
         )
+    
+    # ✅ ПАТЧ: Возвращаем END чтобы сбросить состояние ConversationHandler
+    return ConversationHandler.END
+
+
+async def handle_keyboard_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий на постоянные кнопки клавиатуры"""
+    text = update.message.text
+    
+    if text == "🏠 Главное меню":
+        # Вызываем функцию start
+        return await start(update, context)
+    
+    elif text == "⭐ Создать сказку":
+        # Имитируем нажатие callback кнопки
+        log_event('create_story', update.effective_user.id)
+        
+        # Загружаем темы
+        with open('all_themes_stories.json', 'r', encoding='utf-8') as f:
+            themes = json.load(f)
+        
+        # Создаём кнопки с темами (по 2 в ряд)
+        keyboard = []
+        theme_buttons = []
+        
+        for theme_id, theme_data in themes.items():
+            emoji = theme_data.get('emoji', '')
+            name = theme_data['name']
+            button_text = f"{emoji} {name}".strip() if emoji else name
+            
+            theme_buttons.append(
+                InlineKeyboardButton(
+                    button_text, 
+                    callback_data=f"theme_{theme_id}"
+                )
+            )
+            
+            if len(theme_buttons) == 2:
+                keyboard.append(theme_buttons.copy())
+                theme_buttons = []
+        
+        if theme_buttons:
+            keyboard.append(theme_buttons)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🎨 *Выберите тему сказки:*\n\n"
+            "Каждая история уникальна и адаптируется под возраст и пол ребёнка!",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        
+        return CHOOSING_THEME
+    
+    elif text == "📚 Примеры":
+        log_event('show_examples', update.effective_user.id)
+        
+        keyboard = [
+            [InlineKeyboardButton("🦕 Саша с динозаврами", url="https://drive.google.com/uc?export=view&id=1FIVkCSMI-mjhXX236O8FYhiHCJB4_N_C")],
+            [InlineKeyboardButton("🧚 Юлиана в стране фей", url="https://drive.google.com/uc?export=view&id=1CphV74SQA-s4q3NwsBQNW92gHla-DLLS")],
+            [InlineKeyboardButton("⭐ Создать свою сказку", callback_data="create_story")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "✨ *Взгляните на примеры наших сказок!*\n\n"
+            "Выше — реальные иллюстрации из книг, которые мы создаем. "
+            "Каждая история уникальна, а картинки рисуются специально "
+            "под сюжет и внешность ребенка. 🎨\n\n"
+            "*Хотите увидеть, как выглядит полная книга?*\n\n"
+            "Нажмите на кнопки ниже, чтобы открыть PDF-примеры",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    
+    elif text == "📞 Поддержка":
+        # Устанавливаем флаг что пользователь в режиме поддержки
+        context.user_data['in_support_mode'] = True
+        
+        await update.message.reply_text(
+            "📞 *Техподдержка*\n\n"
+            "Напишите ваш вопрос или проблему, и я передам его администратору.\n\n"
+            "Вы получите ответ в течение нескольких часов. 💬",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отменить", callback_data="cancel_support")]
+            ])
+        )
+
 
 async def show_examples_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_event('show_examples', update.effective_user.id)
@@ -1343,7 +1467,16 @@ def main():
     
     application = Application.builder().token(BOT_TOKEN).request(request).build()
     
-    # Handler для сообщений в поддержку (ПЕРВЫМ! group=-1)
+    # ✅ ПАТЧ: Handler для постоянных кнопок клавиатуры (group=-2, самый первый!)
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.Regex('^(🏠 Главное меню|⭐ Создать сказку|📚 Примеры|📞 Поддержка)$'),
+            handle_keyboard_buttons
+        ),
+        group=-2
+    )
+    
+    # Handler для сообщений в поддержку (ВТОРЫМ! group=-1)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message), group=-1)
     
     conv_handler = ConversationHandler(
@@ -1376,7 +1509,10 @@ def main():
             ],
             PAYMENT: []
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[
+            CommandHandler('cancel', cancel),
+            CommandHandler('start', start)  # ✅ ПАТЧ: Позволяет начать заново в любой момент
+        ]
     )
     
     application.add_handler(conv_handler)
