@@ -399,32 +399,74 @@ async def cancel_support_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка сообщений в режиме поддержки"""
-    
-    # Проверяем флаг поддержки
-    if not context.user_data.get('in_support_mode', False):
-        return  # Пропускаем - это не сообщение в поддержку
+    """Обработка сообщений в режиме поддержки и ответов админа"""
     
     user = update.effective_user
     message_text = update.message.text
     
+    # ✅ СЛУЧАЙ 1: Админ отвечает пользователю
+    if user.id == ADMIN_ID:
+        # Проверяем есть ли активный диалог
+        if 'admin_dialogs' not in context.bot_data:
+            context.bot_data['admin_dialogs'] = {}
+        
+        target_user_id = context.bot_data['admin_dialogs'].get(ADMIN_ID)
+        
+        if target_user_id:
+            try:
+                # Отправляем ответ пользователю
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=f"💬 *Ответ от поддержки:*\n\n{message_text}",
+                    parse_mode='Markdown'
+                )
+                
+                # Подтверждаем админу
+                await update.message.reply_text(
+                    f"✅ Отправлено пользователю\n\n"
+                    f"Чтобы закрыть диалог, напишите /closesupport"
+                )
+                
+                logger.info(f"📤 Админ ответил пользователю {target_user_id}")
+                
+            except Exception as e:
+                logger.error(f"Ошибка отправки ответа: {e}")
+                await update.message.reply_text(f"❌ Ошибка отправки: {e}")
+        
+        return  # Админ не может писать самому себе в поддержку
+    
+    # ✅ СЛУЧАЙ 2: Обычный пользователь пишет в поддержку
+    if not context.user_data.get('in_support_mode', False):
+        return  # Не в режиме поддержки - пропускаем
+    
     # Отправляем админу
     if ADMIN_ID and ADMIN_ID > 0:
         try:
-            admin_text = f"""📩 *НОВОЕ ОБРАЩЕНИЕ В ПОДДЕРЖКУ*
+            # Экранируем спецсимволы для Markdown
+            safe_name = str(user.first_name or 'Аноним').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`')
+            safe_username = str(user.username or 'нет').replace('*', '\\*').replace('_', '\\_')
+            safe_message = str(message_text).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`')
+            
+            admin_text = f"""📩 *СООБЩЕНИЕ В ПОДДЕРЖКУ*
 
-👤 От: {user.first_name or 'Аноним'} (@{user.username or 'без username'})
-🆔 ID: {user.id}
+👤 От: {safe_name}
+📱 Username: @{safe_username}
 
 💬 Сообщение:
-{message_text}"""
+{safe_message}
+
+_Просто напишите ответ в этот чат_"""
             
-            # Кнопка для быстрого ответа
+            # Кнопка для быстрых ответов
             keyboard = [
-                [InlineKeyboardButton("💬 Ответить", callback_data=f"admin_reply_{user.id}")],
                 [InlineKeyboardButton("✅ Решено", callback_data=f"quick_resolved_{user.id}")],
                 [InlineKeyboardButton("🕐 Позже", callback_data=f"quick_later_{user.id}")]
             ]
+            
+            # ✅ АВТОМАТИЧЕСКИ устанавливаем диалог с пользователем
+            if 'admin_dialogs' not in context.bot_data:
+                context.bot_data['admin_dialogs'] = {}
+            context.bot_data['admin_dialogs'][ADMIN_ID] = user.id
             
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
@@ -435,36 +477,20 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
             
             # Подтверждаем пользователю
             await update.message.reply_text(
-                "✅ Ваше сообщение отправлено администратору!\n\n"
-                "Мы ответим в ближайшее время. Спасибо за терпение! 🙏"
+                "✅ Ваше сообщение отправлено в поддержку!\n\n"
+                "Мы ответим вам прямо в этом чате. 💬"
             )
             
-            # Выходим из режима поддержки
-            context.user_data['in_support_mode'] = False
+            # НЕ выходим из режима поддержки - оставляем диалог открытым
+            logger.info(f"📨 Сообщение в поддержку от {user.id}: {message_text[:50]}")
             
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения админу: {e}")
+            logger.error(traceback.format_exc())
             await update.message.reply_text(
-                "❌ Произошла ошибка при отправке сообщения. "
-                "Попробуйте позже или напишите напрямую: @your_support"
+                "❌ Произошла ошибка при отправке сообщения.\n\n"
+                "Попробуйте ещё раз через минуту или напишите /start для возврата в меню."
             )
-
-
-async def admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ нажал кнопку 'Ответить'"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Извлекаем user_id из callback_data
-    user_id = int(query.data.split('_')[-1])
-    
-    # Сохраняем в контексте что админ отвечает этому пользователю
-    context.user_data['replying_to'] = user_id
-    
-    await query.message.reply_text(
-        f"✍️ Напишите ответ пользователю (ID: {user_id}):\n\n"
-        "Или используйте команду: /reply <текст>"
-    )
 
 
 async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -493,41 +519,31 @@ async def quick_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /reply для админа"""
+    """Команда /closesupport для закрытия диалога (для админа)"""
     user_id = update.effective_user.id
     
     # Только админ может использовать
     if user_id != ADMIN_ID:
         return
     
-    # Проверяем что админ в режиме ответа
-    target_user_id = context.user_data.get('replying_to')
+    # Закрываем диалог
+    if 'admin_dialogs' not in context.bot_data:
+        context.bot_data['admin_dialogs'] = {}
     
-    if not target_user_id:
-        await update.message.reply_text("❌ Сначала нажмите кнопку 'Ответить' под сообщением пользователя")
-        return
-    
-    # Получаем текст ответа
-    if not context.args:
-        await update.message.reply_text("❌ Используйте: /reply <ваш ответ>")
-        return
-    
-    reply_text = ' '.join(context.args)
-    
-    try:
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=f"💬 *Ответ от поддержки:*\n\n{reply_text}",
-            parse_mode='Markdown'
+    if ADMIN_ID in context.bot_data['admin_dialogs']:
+        closed_user = context.bot_data['admin_dialogs'][ADMIN_ID]
+        del context.bot_data['admin_dialogs'][ADMIN_ID]
+        await update.message.reply_text(
+            f"✅ Диалог с пользователем закрыт.\n\n"
+            f"Следующее сообщение в поддержку автоматически откроет новый диалог."
         )
-        
-        await update.message.reply_text(f"✅ Ответ отправлен пользователю {target_user_id}")
-        
-        # Очищаем режим ответа
-        context.user_data['replying_to'] = None
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
+    else:
+        await update.message.reply_text("ℹ️ Нет активного диалога")
+
+
+async def closesupport_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /closesupport - алиас для reply_command"""
+    return await reply_command(update, context)
 
 
 async def create_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1542,7 +1558,6 @@ def main():
     application.add_handler(CallbackQueryHandler(cancel_support_callback, pattern='^cancel_support$'))
     
     # Handlers для кнопок админа в поддержке
-    application.add_handler(CallbackQueryHandler(admin_reply_callback, pattern='^admin_reply_'))
     application.add_handler(CallbackQueryHandler(quick_reply_callback, pattern='^quick_'))
     
     # Команды
@@ -1550,7 +1565,8 @@ def main():
     application.add_handler(CommandHandler('stats', stats_command))
     application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
-    application.add_handler(CommandHandler('reply', reply_command))  # Для админа
+    application.add_handler(CommandHandler('reply', reply_command))  # Для админа (закрытие диалога)
+    application.add_handler(CommandHandler('closesupport', closesupport_command))  # Алиас
     
     # ✅ ПАТЧ СТАБИЛЬНОСТИ: Регистрируем глобальный обработчик ошибок
     application.add_error_handler(error_handler)
