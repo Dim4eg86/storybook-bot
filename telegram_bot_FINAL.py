@@ -1014,7 +1014,9 @@ async def create_payment_step(update: Update, context: ContextTypes.DEFAULT_TYPE
             'payment_id': payment_data['id'],
             'chat_id': user_id,
             'user_data': context.user_data.copy(),
-            'order_id': order_id  # ✅ ПАТЧ: Добавляем order_id в данные
+            'order_id': order_id,
+            'attempts': 0,  # ✅ ПАТЧ: Счётчик попыток
+            'max_attempts': 60  # ✅ ПАТЧ: Максимум 10 минут (60 * 10 сек)
         },
         name=job_name
     )
@@ -1030,7 +1032,20 @@ async def check_payment_status(context: ContextTypes.DEFAULT_TYPE):
     payment_id = job.data['payment_id']
     chat_id = job.data['chat_id']
     user_data = job.data['user_data']
-    order_id = job.data['order_id']  # ✅ ПАТЧ: Получаем order_id
+    order_id = job.data['order_id']
+    
+    # ✅ ПАТЧ: Проверяем таймаут
+    attempts = job.data.get('attempts', 0)
+    max_attempts = job.data.get('max_attempts', 60)
+    
+    # Увеличиваем счётчик
+    job.data['attempts'] = attempts + 1
+    
+    # Если превышен таймаут - останавливаем
+    if attempts >= max_attempts:
+        logger.info(f"⏱️ Таймаут автопроверки для payment_id={payment_id} (превышено {max_attempts} попыток)")
+        job.schedule_removal()
+        return
     
     try:
         # Проверяем статус
@@ -1223,9 +1238,12 @@ async def notify_admin_payment(context, user_id, user_name, order_id, amount):
     """Отправить уведомление админу о новой покупке"""
     if ADMIN_ID and ADMIN_ID > 0:
         try:
+            # ✅ ПАТЧ: Экранируем спецсимволы Markdown
+            safe_user_name = str(user_name).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`')
+            
             notification_text = f"""🎉 *НОВАЯ ПОКУПКА!*
 
-👤 Покупатель: {user_name} (ID: {user_id})
+👤 Покупатель: {safe_user_name} (ID: {user_id})
 📝 Заказ: #{order_id}
 💰 Сумма: {amount}₽
 
