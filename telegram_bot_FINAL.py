@@ -1532,12 +1532,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Проверяем есть ли у пользователя заказы (заодно проверяем что пользователь существует)
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT child_name, child_age, gender, theme 
-            FROM orders 
-            WHERE user_id = ? 
-            LIMIT 1
-        """, (target_user_id,))
+        cursor.execute("SELECT child_name, child_age, gender, theme FROM orders WHERE user_id = ? LIMIT 1", (target_user_id,))
         
         last_order = cursor.fetchone()
         cursor.close()
