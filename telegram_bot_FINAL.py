@@ -1529,27 +1529,9 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_user_id = int(context.args[0])
         
-        # Проверяем что пользователь существует в БД
+        # Проверяем есть ли у пользователя заказы (заодно проверяем что пользователь существует)
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE id = ?", (target_user_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            await update.message.reply_text(
-                f"❌ Пользователь с ID {target_user_id} не найден в базе.\n\n"
-                f"Пользователь должен хотя бы раз запустить бота."
-            )
-            cursor.close()
-            conn.close()
-            return
-        
-        user_name = 'Пользователь'  # Просто используем общее название
-        
-        # Проверяем есть ли у пользователя незавершённые данные для генерации
-        # Для этого нужно получить user_data из активной сессии
-        # Но у нас нет доступа к context.user_data другого пользователя
-        # Поэтому проверим есть ли хотя бы один заказ
         cursor.execute("""
             SELECT child_name, child_age, gender, theme 
             FROM orders 
@@ -1564,12 +1546,13 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not last_order:
             await update.message.reply_text(
-                f"❌ У пользователя {user_name} (ID: {target_user_id}) нет заказов.\n\n"
+                f"❌ У пользователя с ID {target_user_id} нет заказов.\n\n"
                 f"Он должен хотя бы раз начать создание книги, чтобы в БД сохранились данные (имя, возраст, тема)."
             )
             return
         
         name, age, gender, theme = last_order
+        user_name = name  # Используем имя ребёнка из заказа
         
         # Создаём GIFT заказ со статусом paid (бесплатный)
         order_id = db.create_order(
