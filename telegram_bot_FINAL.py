@@ -1551,7 +1551,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Но у нас нет доступа к context.user_data другого пользователя
         # Поэтому проверим есть ли хотя бы один заказ
         cursor.execute("""
-            SELECT name, age, gender, theme 
+            SELECT child_name, child_age, gender, theme 
             FROM orders 
             WHERE user_id = ? 
             ORDER BY created_at DESC 
