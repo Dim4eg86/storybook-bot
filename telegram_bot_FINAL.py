@@ -1532,7 +1532,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Проверяем что пользователь существует в БД
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT first_name FROM users WHERE id = ?", (target_user_id,))
+        cursor.execute("SELECT id FROM users WHERE id = ?", (target_user_id,))
         result = cursor.fetchone()
         
         if not result:
@@ -1544,7 +1544,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
             return
         
-        user_name = result[0] or 'Аноним'
+        user_name = 'Пользователь'  # Просто используем общее название
         
         # Проверяем есть ли у пользователя незавершённые данные для генерации
         # Для этого нужно получить user_data из активной сессии
