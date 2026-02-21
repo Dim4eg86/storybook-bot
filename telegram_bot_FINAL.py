@@ -1521,7 +1521,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "❌ Используйте: `/gift <user_id>`\n\n"
             "Пример: `/gift 893901117`\n\n"
-            "Это запустит процесс создания книги для пользователя как будто он оплатил.",
+            "Это даст пользователю 1 бесплатный кредит на создание книги.",
             parse_mode='Markdown'
         )
         return
@@ -1529,115 +1529,38 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_user_id = int(context.args[0])
         
-        # Создаём GIFT заказ с базовыми параметрами
-        # Если у пользователя были заказы раньше - возьмём оттуда
-        # Если нет - используем дефолтные значения
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        # Пробуем получить данные из предыдущих заказов
-        try:
-            # Используем rowid вместо user_id для совместимости
-            cursor.execute("SELECT child_name, child_age, gender, theme FROM orders WHERE rowid IN (SELECT MAX(rowid) FROM orders)")
-            last_order = cursor.fetchone()
-            
-            if last_order:
-                name, age, gender, theme = last_order
-            else:
-                # Дефолтные значения если нет заказов
-                name = "Ребёнок"
-                age = 5
-                gender = "boy"
-                theme = "adventure"
-        except:
-            # Если ошибка - используем дефолтные значения
-            name = "Ребёнок"
-            age = 5
-            gender = "boy"
-            theme = "adventure"
-        
-        cursor.close()
-        conn.close()
-        
-        user_name = name
-        
-        # Создаём GIFT заказ со статусом paid (бесплатный)
-        order_id = db.create_order(
-            user_id=target_user_id,
-            theme=theme,
-            child_name=name,
-            child_age=age,
-            gender=gender,
-            photo_description=None  # Без фото для gift
-        )
-        
-        # Сразу помечаем как оплаченный
-        db.update_order_status(order_id, 'paid')
+        # Добавляем бесплатный кредит
+        if target_user_id in FREE_CREDITS:
+            FREE_CREDITS[target_user_id] += 1
+        else:
+            FREE_CREDITS[target_user_id] = 1
         
         # Уведомляем админа
         await update.message.reply_text(
-            f"🎁 *GIFT заказ создан!*\n\n"
-            f"👤 Пользователь: {user_name}\n"
-            f"🆔 ID: {target_user_id}\n"
-            f"📝 Заказ: #{order_id}\n"
-            f"📖 {name}, {age} лет\n"
-            f"✨ Тема: {theme}\n\n"
-            f"🚀 Запускаю генерацию...",
+            f"🎁 *Бесплатный кредит выдан!*\n\n"
+            f"👤 Пользователь: {target_user_id}\n"
+            f"✨ Бесплатных книг: {FREE_CREDITS[target_user_id]}\n\n"
+            f"Пользователь может создать книгу без оплаты.",
             parse_mode='Markdown'
         )
-        
-        # Создаём временный context для генерации
-        from telegram.ext import ContextTypes
-        
-        # Формируем user_data для генерации
-        gift_user_data = {
-            'name': name,
-            'age': age,
-            'gender': gender,
-            'theme': theme,
-            'order_id': order_id,
-            'photo_path': None  # Без фото для gift
-        }
-        
-        # Создаём временные объекты для start_generation
-        class TempUpdate:
-            def __init__(self, user_id):
-                self.effective_user = type('obj', (object,), {'id': user_id})
-                self.callback_query = None
-                self.message = None
-        
-        class TempContext:
-            def __init__(self, bot, user_data):
-                self.bot = bot
-                self.user_data = user_data
-        
-        temp_update = TempUpdate(target_user_id)
-        temp_context = TempContext(context.bot, gift_user_data)
         
         # Уведомляем пользователя
         try:
             await context.bot.send_message(
                 chat_id=target_user_id,
                 text=f"🎁 *Подарок от администрации!*\n\n"
-                     f"Мы дарим вам бесплатную книгу!\n\n"
-                     f"📖 {name} - {theme}\n"
-                     f"⏳ Создаём книгу...\n\n"
-                     f"Это займёт примерно 5 минут.",
+                     f"Вам подарена **бесплатная книга**!\n\n"
+                     f"Нажмите /start и создайте книгу - оплата не потребуется.\n\n"
+                     f"Доступно бесплатных книг: {FREE_CREDITS[target_user_id]} 📚",
                 parse_mode='Markdown'
             )
+            logger.info(f"🎁 Выдан бесплатный кредит пользователю {target_user_id}")
         except Exception as e:
             logger.error(f"Не удалось уведомить пользователя {target_user_id}: {e}")
-        
-        # Запускаем генерацию
-        logger.info(f"🎁 Запускаю GIFT генерацию для user={target_user_id}, order={order_id}")
-        await start_generation(temp_update, temp_context)
-        logger.info(f"✅ GIFT генерация завершена для order={order_id}")
-        
-        # Финальное уведомление админу
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"✅ GIFT книга готова и отправлена пользователю {target_user_id}!"
-        )
+            await update.message.reply_text(
+                f"⚠️ Кредит выдан, но не удалось уведомить пользователя.\n"
+                f"Возможно, он не запускал бота."
+            )
         
     except ValueError:
         await update.message.reply_text("❌ Неверный формат. Используйте: /gift <user_id>")
@@ -1645,6 +1568,7 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка в gift_command: {e}")
         logger.error(traceback.format_exc())
         await update.message.reply_text(f"❌ Ошибка: {e}")
+
 
 
 async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
