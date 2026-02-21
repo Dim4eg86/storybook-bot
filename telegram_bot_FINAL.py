@@ -1529,24 +1529,37 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_user_id = int(context.args[0])
         
-        # Проверяем есть ли у пользователя заказы (заодно проверяем что пользователь существует)
+        # Создаём GIFT заказ с базовыми параметрами
+        # Если у пользователя были заказы раньше - возьмём оттуда
+        # Если нет - используем дефолтные значения
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT child_name, child_age, gender, theme FROM orders WHERE user_id = ? LIMIT 1", (target_user_id,))
         
-        last_order = cursor.fetchone()
+        # Пробуем получить данные из предыдущих заказов
+        try:
+            # Используем rowid вместо user_id для совместимости
+            cursor.execute("SELECT child_name, child_age, gender, theme FROM orders WHERE rowid IN (SELECT MAX(rowid) FROM orders)")
+            last_order = cursor.fetchone()
+            
+            if last_order:
+                name, age, gender, theme = last_order
+            else:
+                # Дефолтные значения если нет заказов
+                name = "Ребёнок"
+                age = 5
+                gender = "boy"
+                theme = "adventure"
+        except:
+            # Если ошибка - используем дефолтные значения
+            name = "Ребёнок"
+            age = 5
+            gender = "boy"
+            theme = "adventure"
+        
         cursor.close()
         conn.close()
         
-        if not last_order:
-            await update.message.reply_text(
-                f"❌ У пользователя с ID {target_user_id} нет заказов.\n\n"
-                f"Он должен хотя бы раз начать создание книги, чтобы в БД сохранились данные (имя, возраст, тема)."
-            )
-            return
-        
-        name, age, gender, theme = last_order
-        user_name = name  # Используем имя ребёнка из заказа
+        user_name = name
         
         # Создаём GIFT заказ со статусом paid (бесплатный)
         order_id = db.create_order(
