@@ -1536,7 +1536,6 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             SELECT child_name, child_age, gender, theme 
             FROM orders 
             WHERE user_id = ? 
-            ORDER BY created_at DESC 
             LIMIT 1
         """, (target_user_id,))
         
