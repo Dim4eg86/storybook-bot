@@ -1201,14 +1201,40 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"❌ Ошибка в start_generation: {e}")
         logger.error(f"Traceback:", exc_info=True)
+        
+        # ✅ ВАЖНО: Помечаем заказ как неудачный
+        if order_id:
+            db.update_order_status(order_id, 'failed')
+            logger.info(f"❌ Заказ #{order_id} помечен как failed")
+        
+        # ✅ Уведомляем админа о проблеме
+        error_details = str(e)
+        if ADMIN_ID and ADMIN_ID > 0:
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"⚠️ *ОШИБКА ГЕНЕРАЦИИ*\n\n"
+                         f"👤 Пользователь: {name}\n"
+                         f"📝 Заказ: #{order_id}\n"
+                         f"❌ Ошибка: `{error_details[:200]}`\n\n"
+                         f"_Нужно вернуть деньги вручную!_",
+                    parse_mode='Markdown'
+                )
+            except Exception as notify_error:
+                logger.error(f"Ошибка уведомления админа: {notify_error}")
+        
+        # Удаляем статусное сообщение
         try:
             await status_message.delete()
         except:
             pass
+        
+        # Сообщаем пользователю
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"❌ Произошла ошибка при создании книги:\n\n`{str(e)}`\n\n"
-                 "Попробуйте ещё раз или обратитесь в поддержку.",
+            text=f"❌ Произошла ошибка при создании книги:\n\n`{error_details}`\n\n"
+                 "⚠️ *Мы вернём вам деньги в течение 24 часов.*\n\n"
+                 "Извините за неудобства! Напишите в поддержку если есть вопросы.",
             parse_mode='Markdown'
         )
 
@@ -1302,6 +1328,10 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
         pending_orders = cursor.fetchone()[0]
         
+        # ✅ НОВОЕ: Проблемные заказы
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'failed'")
+        failed_orders = cursor.fetchone()[0]
+        
         # Доход
         cursor.execute("SELECT SUM(price) FROM orders WHERE status = 'paid' OR status = 'completed'")
         result = cursor.fetchone()
@@ -1324,6 +1354,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Всего: {total_orders}
 • Оплачено: {paid_orders}
 • Ожидают оплату: {pending_orders}
+• ⚠️ Проблемные: {failed_orders}
 
 💰 *Доход:* {revenue:,.0f}₽
 
@@ -1331,7 +1362,20 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Пользователи → Заказы: {conv_order:.1f}%
 • Заказы → Оплата: {conv_payment:.1f}%"""
         
-        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        # ✅ Кнопка для просмотра проблемных заказов
+        keyboard = []
+        if failed_orders > 0:
+            keyboard.append([InlineKeyboardButton(
+                f"⚠️ Посмотреть проблемные ({failed_orders})",
+                callback_data="view_failed_orders"
+            )])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        await update.message.reply_text(
+            stats_text, 
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
         
     except Exception as e:
         logger.error(f"Ошибка в stats_command: {e}")
@@ -1343,6 +1387,273 @@ async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать свой user_id"""
     user_id = update.effective_user.id
     await update.message.reply_text(f"🆔 Ваш ID: `{user_id}`", parse_mode='Markdown')
+
+
+async def view_failed_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать проблемные заказы (для админа)"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    if user_id != ADMIN_ID:
+        return
+    
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Получаем failed заказы
+        cursor.execute("""
+            SELECT o.id, o.user_id, o.price, o.created_at, u.first_name
+            FROM orders o
+            LEFT JOIN users u ON o.user_id = u.id
+            WHERE o.status = 'failed'
+            ORDER BY o.created_at DESC
+            LIMIT 10
+        """)
+        
+        failed_orders = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if not failed_orders:
+            await query.message.reply_text("✅ Нет проблемных заказов!")
+            return
+        
+        # Формируем список
+        text = "⚠️ *ПРОБЛЕМНЫЕ ЗАКАЗЫ*\n\n"
+        text += "_Нужно вернуть деньги вручную:_\n\n"
+        
+        for order in failed_orders:
+            order_id, user_id, price, created_at, user_name = order
+            text += f"📝 Заказ #{order_id}\n"
+            text += f"👤 {user_name or 'Аноним'} (ID: {user_id})\n"
+            text += f"💰 {price}₽\n"
+            text += f"📅 {created_at[:16]}\n"
+            text += f"_Команда:_ `/refund {order_id}`\n\n"
+        
+        await query.message.reply_text(text, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Ошибка в view_failed_orders: {e}")
+        await query.message.reply_text(f"❌ Ошибка: {e}")
+
+
+async def refund_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /refund <order_id> - пометить что деньги возвращены"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Используйте: /refund <order_id>")
+        return
+    
+    try:
+        order_id = int(context.args[0])
+        
+        # Обновляем статус заказа
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Проверяем что заказ существует и failed
+        cursor.execute("SELECT user_id, price, status FROM orders WHERE id = ?", (order_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            await update.message.reply_text(f"❌ Заказ #{order_id} не найден")
+            cursor.close()
+            conn.close()
+            return
+        
+        user_id_order, price, status = result
+        
+        if status != 'failed':
+            await update.message.reply_text(f"❌ Заказ #{order_id} не в статусе 'failed' (текущий: {status})")
+            cursor.close()
+            conn.close()
+            return
+        
+        # Помечаем как возвращено
+        cursor.execute("UPDATE orders SET status = 'refunded' WHERE id = ?", (order_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Уведомляем админа
+        await update.message.reply_text(
+            f"✅ Заказ #{order_id} помечен как возвращён!\n\n"
+            f"💰 Сумма: {price}₽\n"
+            f"👤 Пользователь: {user_id_order}\n\n"
+            f"_Не забудь вернуть деньги через YooKassa!_"
+        )
+        
+        # Уведомляем пользователя
+        try:
+            await context.bot.send_message(
+                chat_id=user_id_order,
+                text=f"✅ *Возврат средств*\n\n"
+                     f"Мы вернули {price}₽ за заказ #{order_id}.\n\n"
+                     f"Деньги поступят на карту в течение 3-5 рабочих дней.\n\n"
+                     f"Извините за неудобства! 🙏",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Не удалось уведомить пользователя {user_id_order}: {e}")
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный формат. Используйте: /refund <order_id>")
+    except Exception as e:
+        logger.error(f"Ошибка в refund_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+
+async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /gift <user_id> - подарить пользователю бесплатную книгу (для админа)"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Используйте: `/gift <user_id>`\n\n"
+            "Пример: `/gift 893901117`\n\n"
+            "Это запустит процесс создания книги для пользователя как будто он оплатил.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        
+        # Проверяем что пользователь существует в БД
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT first_name FROM users WHERE id = ?", (target_user_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            await update.message.reply_text(
+                f"❌ Пользователь с ID {target_user_id} не найден в базе.\n\n"
+                f"Пользователь должен хотя бы раз запустить бота."
+            )
+            cursor.close()
+            conn.close()
+            return
+        
+        user_name = result[0] or 'Аноним'
+        
+        # Проверяем есть ли у пользователя незавершённые данные для генерации
+        # Для этого нужно получить user_data из активной сессии
+        # Но у нас нет доступа к context.user_data другого пользователя
+        # Поэтому проверим есть ли хотя бы один заказ
+        cursor.execute("""
+            SELECT name, age, gender, theme 
+            FROM orders 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (target_user_id,))
+        
+        last_order = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not last_order:
+            await update.message.reply_text(
+                f"❌ У пользователя {user_name} (ID: {target_user_id}) нет заказов.\n\n"
+                f"Он должен хотя бы раз начать создание книги, чтобы в БД сохранились данные (имя, возраст, тема)."
+            )
+            return
+        
+        name, age, gender, theme = last_order
+        
+        # Создаём GIFT заказ со статусом paid (бесплатный)
+        order_id = db.create_order(
+            user_id=target_user_id,
+            name=name,
+            age=age,
+            gender=gender,
+            theme=theme,
+            price=0  # Бесплатно!
+        )
+        
+        # Сразу помечаем как оплаченный
+        db.update_order_status(order_id, 'paid')
+        
+        # Уведомляем админа
+        await update.message.reply_text(
+            f"🎁 *GIFT заказ создан!*\n\n"
+            f"👤 Пользователь: {user_name}\n"
+            f"🆔 ID: {target_user_id}\n"
+            f"📝 Заказ: #{order_id}\n"
+            f"📖 {name}, {age} лет\n"
+            f"✨ Тема: {theme}\n\n"
+            f"🚀 Запускаю генерацию...",
+            parse_mode='Markdown'
+        )
+        
+        # Создаём временный context для генерации
+        from telegram.ext import ContextTypes
+        
+        # Формируем user_data для генерации
+        gift_user_data = {
+            'name': name,
+            'age': age,
+            'gender': gender,
+            'theme': theme,
+            'order_id': order_id,
+            'photo_path': None  # Без фото для gift
+        }
+        
+        # Создаём временные объекты для start_generation
+        class TempUpdate:
+            def __init__(self, user_id):
+                self.effective_user = type('obj', (object,), {'id': user_id})
+                self.callback_query = None
+                self.message = None
+        
+        class TempContext:
+            def __init__(self, bot, user_data):
+                self.bot = bot
+                self.user_data = user_data
+        
+        temp_update = TempUpdate(target_user_id)
+        temp_context = TempContext(context.bot, gift_user_data)
+        
+        # Уведомляем пользователя
+        try:
+            await context.bot.send_message(
+                chat_id=target_user_id,
+                text=f"🎁 *Подарок от администрации!*\n\n"
+                     f"Мы дарим вам бесплатную книгу!\n\n"
+                     f"📖 {name} - {theme}\n"
+                     f"⏳ Создаём книгу...\n\n"
+                     f"Это займёт примерно 5 минут.",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Не удалось уведомить пользователя {target_user_id}: {e}")
+        
+        # Запускаем генерацию
+        logger.info(f"🎁 Запускаю GIFT генерацию для user={target_user_id}, order={order_id}")
+        await start_generation(temp_update, temp_context)
+        logger.info(f"✅ GIFT генерация завершена для order={order_id}")
+        
+        # Финальное уведомление админу
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"✅ GIFT книга готова и отправлена пользователю {target_user_id}!"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный формат. Используйте: /gift <user_id>")
+    except Exception as e:
+        logger.error(f"Ошибка в gift_command: {e}")
+        logger.error(traceback.format_exc())
+        await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
 async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1563,6 +1874,9 @@ def main():
     # Команды
     application.add_handler(CommandHandler('check', check_payment_command))
     application.add_handler(CommandHandler('stats', stats_command))
+    application.add_handler(CommandHandler('refund', refund_command))  # Возврат денег
+    application.add_handler(CommandHandler('gift', gift_command))  # Подарить книгу
+    application.add_handler(CallbackQueryHandler(view_failed_orders_callback, pattern='^view_failed_orders$'))
     application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
     application.add_handler(CommandHandler('reply', reply_command))  # Для админа (закрытие диалога)
