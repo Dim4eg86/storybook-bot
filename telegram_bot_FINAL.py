@@ -1332,10 +1332,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'failed'")
         failed_orders = cursor.fetchone()[0]
         
-        # Доход
-        cursor.execute("SELECT SUM(price) FROM orders WHERE status = 'paid' OR status = 'completed'")
-        result = cursor.fetchone()
-        revenue = int(result[0]) if result and result[0] else 0
+        # Доход - считаем количество оплаченных × цена
+        # Предполагаем что все заказы по базовой цене 290₽
+        revenue = paid_orders * BOOK_PRICE_BASE
         
         cursor.close()
         conn.close()
@@ -1404,7 +1403,7 @@ async def view_failed_orders_callback(update: Update, context: ContextTypes.DEFA
         
         # Получаем failed заказы
         cursor.execute("""
-            SELECT o.id, o.user_id, o.price, o.created_at, u.first_name
+            SELECT o.id, o.user_id, o.created_at, u.first_name
             FROM orders o
             LEFT JOIN users u ON o.user_id = u.id
             WHERE o.status = 'failed'
@@ -1425,10 +1424,10 @@ async def view_failed_orders_callback(update: Update, context: ContextTypes.DEFA
         text += "_Нужно вернуть деньги вручную:_\n\n"
         
         for order in failed_orders:
-            order_id, user_id, price, created_at, user_name = order
+            order_id, user_id, created_at, user_name = order
             text += f"📝 Заказ #{order_id}\n"
             text += f"👤 {user_name or 'Аноним'} (ID: {user_id})\n"
-            text += f"💰 {price}₽\n"
+            text += f"💰 {BOOK_PRICE_BASE}₽\n"
             text += f"📅 {created_at[:16]}\n"
             text += f"_Команда:_ `/refund {order_id}`\n\n"
         
@@ -1458,7 +1457,7 @@ async def refund_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor = conn.cursor()
         
         # Проверяем что заказ существует и failed
-        cursor.execute("SELECT user_id, price, status FROM orders WHERE id = ?", (order_id,))
+        cursor.execute("SELECT user_id, status FROM orders WHERE id = ?", (order_id,))
         result = cursor.fetchone()
         
         if not result:
@@ -1467,7 +1466,9 @@ async def refund_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
             return
         
-        user_id_order, price, status = result
+        user_id_order, status = result
+        # Используем базовую цену
+        price = BOOK_PRICE_BASE
         
         if status != 'failed':
             await update.message.reply_text(f"❌ Заказ #{order_id} не в статусе 'failed' (текущий: {status})")
@@ -1573,11 +1574,11 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Создаём GIFT заказ со статусом paid (бесплатный)
         order_id = db.create_order(
             user_id=target_user_id,
-            name=name,
-            age=age,
-            gender=gender,
             theme=theme,
-            price=0  # Бесплатно!
+            child_name=name,
+            child_age=age,
+            gender=gender,
+            photo_description=None  # Без фото для gift
         )
         
         # Сразу помечаем как оплаченный
@@ -1684,10 +1685,8 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
         pending_orders = cursor.fetchone()[0]
         
-        # Доход
-        cursor.execute("SELECT SUM(price) FROM orders WHERE status = 'paid' OR status = 'completed'")
-        result = cursor.fetchone()
-        revenue = int(result[0]) if result and result[0] else 0
+        # Доход - считаем количество оплаченных × цена
+        revenue = paid_orders * BOOK_PRICE_BASE
         
         cursor.close()
         conn.close()
