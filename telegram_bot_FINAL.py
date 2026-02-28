@@ -1162,13 +1162,20 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
+        # Определяем plan из user_data
+        version = context.user_data.get('version', 'base')
+        plan = 'premium' if version == 'premium' else 'standard'
+        
+        logger.info(f"🎨 Генерация: plan={plan}, photo={'есть' if photo_path else 'нет'}")
+        
         # ГЕНЕРИРУЕМ КНИГУ
         pdf_path = create_storybook_v2(
             child_name=name,
             child_age=age,
             gender=gender,
             theme_id=theme,
-            photo_path=photo_path
+            photo_path=photo_path,
+            plan=plan  # ✅ ПЕРЕДАЁМ ПЛАН ДЛЯ PREMIUM ПЕРСОНАЖА
         )
         
         # Обновляем заказ в БД
@@ -1202,22 +1209,47 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"❌ Ошибка в start_generation: {e}")
         logger.error(f"Traceback:", exc_info=True)
         
+        error_details = str(e)
+        is_overloaded = "529" in error_details or "overloaded" in error_details.lower()
+        
         # ✅ ВАЖНО: Помечаем заказ как неудачный
         if order_id:
             db.update_order_status(order_id, 'failed')
             logger.info(f"❌ Заказ #{order_id} помечен как failed")
         
+        # ✅ Если ошибка 529 - автоматически даём бесплатный кредит
+        if is_overloaded:
+            user_id = context.user_data.get('user_id') or chat_id
+            if user_id in FREE_CREDITS:
+                FREE_CREDITS[user_id] += 1
+            else:
+                FREE_CREDITS[user_id] = 1
+            logger.info(f"🎁 Автоматически выдан бесплатный кредит пользователю {user_id} из-за перегрузки")
+        
         # ✅ Уведомляем админа о проблеме
-        error_details = str(e)
         if ADMIN_ID and ADMIN_ID > 0:
             try:
+                if is_overloaded:
+                    admin_message = (
+                        f"⚠️ *ОШИБКА: СЕРВЕР ПЕРЕГРУЖЕН (529)*\n\n"
+                        f"👤 Пользователь: {name}\n"
+                        f"📝 Заказ: #{order_id}\n"
+                        f"❌ Ошибка: Anthropic API перегружен\n\n"
+                        f"✅ *Автоматически выдан бесплатный кредит*\n"
+                        f"Пользователь может попробовать позже бесплатно."
+                    )
+                else:
+                    admin_message = (
+                        f"⚠️ *ОШИБКА ГЕНЕРАЦИИ*\n\n"
+                        f"👤 Пользователь: {name}\n"
+                        f"📝 Заказ: #{order_id}\n"
+                        f"❌ Ошибка: `{error_details[:200]}`\n\n"
+                        f"_Нужно вернуть деньги вручную!_"
+                    )
+                
                 await context.bot.send_message(
                     chat_id=ADMIN_ID,
-                    text=f"⚠️ *ОШИБКА ГЕНЕРАЦИИ*\n\n"
-                         f"👤 Пользователь: {name}\n"
-                         f"📝 Заказ: #{order_id}\n"
-                         f"❌ Ошибка: `{error_details[:200]}`\n\n"
-                         f"_Нужно вернуть деньги вручную!_",
+                    text=admin_message,
                     parse_mode='Markdown'
                 )
             except Exception as notify_error:
@@ -1230,11 +1262,24 @@ async def start_generation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         
         # Сообщаем пользователю
+        if is_overloaded:
+            user_message = (
+                f"⚠️ *Сервер временно перегружен*\n\n"
+                f"Извините! Наши серверы не смогли обработать запрос.\n\n"
+                f"🎁 *Мы подарили вам бесплатную книгу!*\n\n"
+                f"Попробуйте создать книгу ещё раз через 5-10 минут.\n"
+                f"Оплата не потребуется!"
+            )
+        else:
+            user_message = (
+                f"❌ Произошла ошибка при создании книги:\n\n`{error_details}`\n\n"
+                f"⚠️ *Мы вернём вам деньги в течение 24 часов.*\n\n"
+                f"Извините за неудобства! Напишите в поддержку если есть вопросы."
+            )
+        
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"❌ Произошла ошибка при создании книги:\n\n`{error_details}`\n\n"
-                 "⚠️ *Мы вернём вам деньги в течение 24 часов.*\n\n"
-                 "Извините за неудобства! Напишите в поддержку если есть вопросы.",
+            text=user_message,
             parse_mode='Markdown'
         )
 
