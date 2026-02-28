@@ -475,7 +475,7 @@ def create_storybook_v2(
         image_path = os.path.join(output_dir, image_filename)
         
         # ✅ Генерируем с учётом тарифа
-        use_pulid = (plan == 'premium')
+        use_pulid = False  # Временно отключено из-за таймаутов
         generate_illustration(prompt, image_path, photo_path=photo_path, use_pulid=use_pulid)
         
         scenes_data.append({
