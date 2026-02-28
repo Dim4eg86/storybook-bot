@@ -224,7 +224,7 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
                         "black-forest-labs/flux-kontext-pro",
                         input={
                             "input_image": f,  # ← Передаём файл напрямую!
-                            "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics",
+                            "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics. CRITICAL INSTRUCTION: DO NOT create a close-up portrait or headshot! This must be a FULL SCENE showing the character interacting with their environment, other characters (unicorns, dinosaurs, robots, etc), and story elements. The character should take MAXIMUM 50% of the image - show the ACTION and STORY, not just the face. Wide scene composition required.",
                             "aspect_ratio": "3:4",
                             "num_outputs": 1,
                             "output_format": "png",
@@ -461,14 +461,29 @@ def create_storybook_v2(
         for var, value in vars_map.items():
             prompt = prompt.replace(f"{{{var}}}", value)
         
-        # ✅ УЛУЧШЕННЫЙ ПРОМПТ для вертикального формата
-        # Указываем AI, что нужна вертикальная композиция
-        prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration, 
-        VERTICAL COMPOSITION, full-height portrait, character centered in frame, 
-        vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes, 
-        anatomically correct hands, five fingers per hand, proper hand anatomy, 
-        showing character from head to toe in vertical frame,
-        high quality, masterpiece"""
+        # ✅ РАЗНЫЕ ПРОМПТЫ для базовой и премиум версии
+        if plan == 'premium':
+            # ПРЕМИУМ: Фокус на лице + окружение видно
+            prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration, 
+            VERTICAL COMPOSITION, WIDE SCENE showing character AND environment together,
+            character takes maximum 50% of frame - leave space for environment and other elements,
+            MUST SHOW: all mentioned story elements (other characters like unicorns/dinosaurs/robots, 
+            objects, environment) clearly visible and detailed in the scene,
+            DO NOT make close-up portrait - show the ACTION and INTERACTION,
+            vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes,
+            anatomically correct hands, five fingers per hand, proper hand anatomy,
+            cinematic storybook illustration with narrative focus, NOT a portrait photo,
+            high quality, masterpiece"""
+        else:
+            # БАЗОВАЯ: Обычная сцена
+            prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration,
+            VERTICAL COMPOSITION, WIDE DYNAMIC SCENE,
+            character integrated with environment and all story elements clearly visible,
+            MUST INCLUDE: all characters, creatures, and objects mentioned in the scene,
+            vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes,
+            anatomically correct hands, five fingers per hand, proper hand anatomy,
+            action-focused storybook illustration showing the narrative,
+            high quality, masterpiece"""
         
         # Генерируем иллюстрацию
         image_filename = f"scene_{scene_num:02d}.png"
