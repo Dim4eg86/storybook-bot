@@ -1764,7 +1764,7 @@ def main():
         connection_pool_size=30,     # Больше одновременных соединений
         connect_timeout=15.0,        # Таймаут подключения
         read_timeout=30.0,           # Таймаут чтения
-        write_timeout=30.0,          # Таймаут записи
+        write_timeout=60.0,          # Таймаут записи (увеличен для больших PDF)
         pool_timeout=15.0            # Таймаут получения соединения
     )
     
