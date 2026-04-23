@@ -269,6 +269,21 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
             file_size = os.path.getsize(output_path)
             print(f"   💾 Сохранено {file_size} байт")
             
+            # 🗜️ СЖАТИЕ изображения для уменьшения размера PDF (чтобы PDF < 20MB для Telegram)
+            try:
+                img = Image.open(output_path)
+                original_size = file_size
+                
+                # Сжимаем с качеством 85% (визуально незаметно, но файл уменьшается на 40-50%)
+                img.save(output_path, 'PNG', optimize=True, quality=85)
+                
+                new_size = os.path.getsize(output_path)
+                saved_kb = (original_size - new_size) / 1024
+                print(f"   🗜️ Сжато: -{saved_kb:.1f} KB (качество 85%)")
+            except Exception as e:
+                print(f"   ⚠️ Не удалось сжать изображение: {e}")
+                # Если сжатие не удалось - продолжаем с исходным файлом
+            
             # Проверяем целостность и размеры
             time.sleep(0.5)
             
@@ -467,8 +482,7 @@ def create_storybook_v2(
             prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration, 
             VERTICAL COMPOSITION, WIDE SCENE showing character AND environment together,
             character takes maximum 50% of frame - leave space for environment and other elements,
-            MUST SHOW: all mentioned story elements (other characters like unicorns/dinosaurs/robots, 
-            objects, environment) clearly visible and detailed in the scene,
+            MUST SHOW: all story elements, characters, and objects from the scene description,
             DO NOT make close-up portrait - show the ACTION and INTERACTION,
             vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes,
             anatomically correct hands, five fingers per hand, proper hand anatomy,
@@ -479,7 +493,7 @@ def create_storybook_v2(
             prompt += """, Disney Pixar animation style, 3D rendered, professional children's book illustration,
             VERTICAL COMPOSITION, WIDE DYNAMIC SCENE,
             character integrated with environment and all story elements clearly visible,
-            MUST INCLUDE: all characters, creatures, and objects mentioned in the scene,
+            MUST INCLUDE: all characters, creatures, and objects from the scene,
             vibrant colors, perfect faces, detailed character design, smooth skin, expressive eyes,
             anatomically correct hands, five fingers per hand, proper hand anatomy,
             action-focused storybook illustration showing the narrative,
@@ -490,8 +504,7 @@ def create_storybook_v2(
         image_path = os.path.join(output_dir, image_filename)
         
         # ✅ Генерируем с учётом тарифа
-        # ВРЕМЕННО ОТКЛЮЧАЕМ PuLID - он делает только портреты, игнорируя промпты
-        use_pulid = False  # (plan == 'premium')
+        use_pulid = (plan == 'premium')  # Премиум использует PuLID для похожести
         generate_illustration(prompt, image_path, photo_path=photo_path, use_pulid=use_pulid)
         
         scenes_data.append({
