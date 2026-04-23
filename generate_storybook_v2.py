@@ -218,20 +218,45 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
             if use_pulid and photo_path and os.path.exists(photo_path):
                 print(f"   🎭 Используем Flux Kontext Pro (премиум с сохранением лица)...")
                 
-                # Загружаем фото напрямую через Replicate (не base64!)
-                with open(photo_path, "rb") as f:
-                    output = replicate.run(
-                        "black-forest-labs/flux-kontext-pro",
-                        input={
-                            "input_image": f,  # ← Передаём файл напрямую!
-                            "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics. CRITICAL INSTRUCTION: DO NOT create a close-up portrait or headshot! This must be a FULL SCENE showing the character interacting with their environment, other characters (unicorns, dinosaurs, robots, etc), and story elements. The character should take MAXIMUM 50% of the image - show the ACTION and STORY, not just the face. Wide scene composition required.",
-                            "aspect_ratio": "3:4",
-                            "num_outputs": 1,
-                            "output_format": "png",
-                            "output_quality": 100,
-                            "safety_tolerance": 2
-                        }
-                    )
+                try:
+                    # Загружаем фото напрямую через Replicate (не base64!)
+                    with open(photo_path, "rb") as f:
+                        output = replicate.run(
+                            "black-forest-labs/flux-kontext-pro",
+                            input={
+                                "input_image": f,  # ← Передаём файл напрямую!
+                                "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics. CRITICAL INSTRUCTION: DO NOT create a close-up portrait or headshot! This must be a FULL SCENE showing the character interacting with their environment, other characters (unicorns, dinosaurs, robots, etc), and story elements. The character should take MAXIMUM 50% of the image - show the ACTION and STORY, not just the face. Wide scene composition required.",
+                                "aspect_ratio": "3:4",
+                                "num_outputs": 1,
+                                "output_format": "png",
+                                "output_quality": 100,
+                                "safety_tolerance": 2
+                            }
+                        )
+                except Exception as nsfw_error:
+                    # 🛡️ NSFW FALLBACK: Если Flux Kontext Pro отклонил фото - используем обычный Flux
+                    error_msg = str(nsfw_error)
+                    if "E005" in error_msg or "flagged as sensitive" in error_msg or "sensitive" in error_msg.lower():
+                        print(f"   ⚠️ Flux Kontext Pro отклонил фото (NSFW фильтр)")
+                        print(f"   🔄 Переключаюсь на обычный Flux 1.1 Pro с детальным промптом...")
+                        
+                        # Используем обычный Flux с детальным промптом из анализа
+                        output = replicate.run(
+                            "black-forest-labs/flux-1.1-pro",
+                            input={
+                                "prompt": prompt,  # Промпт уже содержит детали из analyze_photo
+                                "aspect_ratio": "3:4",
+                                "num_outputs": 1,
+                                "output_format": "png",
+                                "output_quality": 100,
+                                "safety_tolerance": 5,
+                                "guidance": 3.5,
+                                "num_inference_steps": 28
+                            }
+                        )
+                    else:
+                        # Другая ошибка - пробрасываем дальше
+                        raise
             else:
                 # ✅ СТАНДАРТ: Обычный Flux Pro без фото
                 output = replicate.run(
