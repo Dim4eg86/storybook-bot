@@ -225,7 +225,7 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
                             "black-forest-labs/flux-kontext-pro",
                             input={
                                 "input_image": f,  # ← Передаём файл напрямую!
-                                "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics. CRITICAL INSTRUCTION: DO NOT create a close-up portrait or headshot! This must be a FULL SCENE showing the character interacting with their environment, other characters (unicorns, dinosaurs, robots, etc), and story elements. The character should take MAXIMUM 50% of the image - show the ACTION and STORY, not just the face. Wide scene composition required.",
+                                "prompt": prompt + ". Transform this person into a Pixar 3D animated character while keeping the same facial features, maintain the face identity, preserve facial characteristics. CRITICAL INSTRUCTION: DO NOT create a close-up portrait or headshot! This must be a FULL SCENE showing the character interacting with their environment and story elements. The character should take MAXIMUM 50% of the image - show the ACTION and STORY, not just the face. Wide scene composition required.",
                                 "aspect_ratio": "3:4",
                                 "num_outputs": 1,
                                 "output_format": "png",
@@ -481,7 +481,8 @@ def create_storybook_v2(
     os.makedirs(output_dir, exist_ok=True)
     
     # Генерируем иллюстрации
-    print("🎨 Генерирую 10 вертикальных иллюстраций 3:4 (это займёт ~20 минут)...")
+    print("🎨 Генерирую 10 вертикальных иллюстраций 3:4...")
+    print("⏱️ Время генерации: ~5-6 минут (пауза 30 сек между картинками для соблюдения лимитов API)")
     print()
     
     scenes_data = []
@@ -541,10 +542,10 @@ def create_storybook_v2(
         
         # ✅ Задержка между запросами для избежания rate limit
         # Если баланс Replicate < $5, лимит 6 запросов/минуту
-        # Значит нужна пауза 10+ секунд между запросами
+        # С паузой 30 сек = ~2 запроса в минуту (безопасно)
         if scene_num < len(scenes):  # Не ждём после последней сцены
             import time
-            delay = 12 if not use_pulid else 15  # PuLID чуть медленнее
+            delay = 30  # Увеличено до 30 сек для соблюдения лимита
             print(f"   ⏳ Пауза {delay} секунд перед следующей генерацией...")
             time.sleep(delay)
         
