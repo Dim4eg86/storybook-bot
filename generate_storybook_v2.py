@@ -296,15 +296,34 @@ def generate_illustration(prompt, output_path, photo_path=None, use_pulid=False)
             
             # 🗜️ СЖАТИЕ изображения для уменьшения размера PDF (чтобы PDF < 20MB для Telegram)
             try:
+                from PIL import Image
                 img = Image.open(output_path)
                 original_size = file_size
                 
-                # Сжимаем с качеством 85% (визуально незаметно, но файл уменьшается на 40-50%)
-                img.save(output_path, 'PNG', optimize=True, quality=85)
+                # Конвертируем PNG → RGB (для JPEG) и сжимаем с качеством 90%
+                # PNG не поддерживает quality, поэтому используем JPEG
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    # Создаём белый фон для прозрачности
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Сохраняем как JPEG с качеством 90% (хороший баланс качество/размер)
+                jpeg_path = output_path.replace('.png', '.jpg')
+                img.save(jpeg_path, 'JPEG', quality=90, optimize=True)
+                
+                # Заменяем PNG на JPEG
+                os.remove(output_path)
+                os.rename(jpeg_path, output_path)
                 
                 new_size = os.path.getsize(output_path)
                 saved_kb = (original_size - new_size) / 1024
-                print(f"   🗜️ Сжато: -{saved_kb:.1f} KB (качество 85%)")
+                compression_pct = (1 - new_size/original_size) * 100
+                print(f"   🗜️ Сжато: -{saved_kb:.1f} KB ({compression_pct:.0f}% меньше, качество JPEG 90%)")
             except Exception as e:
                 print(f"   ⚠️ Не удалось сжать изображение: {e}")
                 # Если сжатие не удалось - продолжаем с исходным файлом
@@ -483,6 +502,7 @@ def create_storybook_v2(
     # Генерируем иллюстрации
     print("🎨 Генерирую 10 вертикальных иллюстраций 3:4...")
     print("⏱️ Время генерации: ~5-6 минут (пауза 30 сек между картинками для соблюдения лимитов API)")
+    print("🗜️ СЖАТИЕ: PNG → JPEG качество 90% для уменьшения PDF до <20MB")
     print()
     
     scenes_data = []
