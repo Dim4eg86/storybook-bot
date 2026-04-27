@@ -1573,7 +1573,7 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT user_id, name, theme, status FROM orders WHERE id = ?",
+            "SELECT user_id, name, theme, status FROM orders WHERE id = %s",
             (order_id,)
         )
         result = cursor.fetchone()
