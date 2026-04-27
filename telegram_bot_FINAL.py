@@ -1649,6 +1649,45 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
+async def dbinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /dbinfo - показать структуру таблицы orders (для админа)"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Получаем структуру таблицы orders
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'orders'
+            ORDER BY ordinal_position
+        """)
+        
+        columns = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if not columns:
+            await update.message.reply_text("❌ Таблица orders не найдена")
+            return
+        
+        # Форматируем вывод
+        text = "📋 Структура таблицы orders:\n\n"
+        for col_name, col_type in columns:
+            text += f"• {col_name}: {col_type}\n"
+        
+        await update.message.reply_text(text)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в dbinfo_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+
 async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /gift <user_id> - подарить пользователю бесплатную книгу (для админа)"""
     user_id = update.effective_user.id
@@ -1929,6 +1968,7 @@ def main():
     application.add_handler(CommandHandler('refund', refund_command))  # Возврат денег
     application.add_handler(CommandHandler('gift', gift_command))  # Подарить книгу
     application.add_handler(CommandHandler('getpdf', getpdf_command))  # Получить PDF заказа
+    application.add_handler(CommandHandler('dbinfo', dbinfo_command))  # Показать структуру БД
     application.add_handler(CallbackQueryHandler(view_failed_orders_callback, pattern='^view_failed_orders$'))
     application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
