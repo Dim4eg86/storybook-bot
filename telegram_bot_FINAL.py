@@ -1555,6 +1555,100 @@ async def refund_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
+async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /getpdf <order_id> - получить PDF файл заказа (для админа)"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Используйте: /getpdf <order_id>\n\nПример: /getpdf 270")
+        return
+    
+    try:
+        order_id = int(context.args[0])
+        
+        # Ищем заказ в БД
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id, name, theme, status FROM orders WHERE id = ?",
+            (order_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not result:
+            await update.message.reply_text(f"❌ Заказ #{order_id} не найден")
+            return
+        
+        user_id_order, name, theme, status = result
+        
+        # Формируем путь к PDF
+        theme_folders = {
+            'robot_city': 'robot_city',
+            'space': 'space',
+            'dinosaurs': 'dinosaurs',
+            'underwater': 'underwater',
+            'fairy_land': 'fairy_land',
+            'princess': 'princess',
+            'unicorns': 'unicorns',
+            'knight': 'knight'
+        }
+        
+        theme_names = {
+            'robot_city': 'в_городе_роботов',
+            'space': 'в_космосе',
+            'dinosaurs': 'с_динозаврами',
+            'underwater': 'под_водой',
+            'fairy_land': 'в_стране_фей',
+            'princess': 'в_королевстве',
+            'unicorns': 'с_единорогами',
+            'knight': 'с_рыцарем'
+        }
+        
+        folder_name = f"storybook_{name}_{theme_folders.get(theme, theme)}"
+        pdf_filename = f"{name}_{theme_names.get(theme, theme)}.pdf"
+        pdf_path = f"{folder_name}/{pdf_filename}"
+        
+        # Проверяем существование файла
+        import os
+        if not os.path.exists(pdf_path):
+            await update.message.reply_text(
+                f"❌ PDF не найден!\n\n"
+                f"Заказ: #{order_id}\n"
+                f"Статус: {status}\n"
+                f"Ожидаемый путь: {pdf_path}"
+            )
+            return
+        
+        # Отправляем PDF
+        file_size_mb = os.path.getsize(pdf_path) / 1024 / 1024
+        await update.message.reply_text(f"📤 Отправляю PDF заказа #{order_id}...")
+        
+        with open(pdf_path, 'rb') as pdf_file:
+            await context.bot.send_document(
+                chat_id=ADMIN_ID,
+                document=pdf_file,
+                filename=pdf_filename,
+                caption=f"📚 Заказ #{order_id}\n"
+                        f"👤 User: {user_id_order}\n"
+                        f"📖 {name} - {theme}\n"
+                        f"💾 Размер: {file_size_mb:.1f} MB\n"
+                        f"📊 Статус: {status}"
+            )
+        
+        logger.info(f"✅ PDF заказа #{order_id} отправлен админу")
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный формат. Используйте: /getpdf <order_id>")
+    except Exception as e:
+        logger.error(f"Ошибка в getpdf_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+
 async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /gift <user_id> - подарить пользователю бесплатную книгу (для админа)"""
     user_id = update.effective_user.id
@@ -1834,6 +1928,7 @@ def main():
     application.add_handler(CommandHandler('stats', stats_command))
     application.add_handler(CommandHandler('refund', refund_command))  # Возврат денег
     application.add_handler(CommandHandler('gift', gift_command))  # Подарить книгу
+    application.add_handler(CommandHandler('getpdf', getpdf_command))  # Получить PDF заказа
     application.add_handler(CallbackQueryHandler(view_failed_orders_callback, pattern='^view_failed_orders$'))
     application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
@@ -1847,10 +1942,11 @@ def main():
     logger.info("🚀 БОТ ЗАПУЩЕН С ПАТЧЕМ СТАБИЛЬНОСТИ!")
     logger.info("=" * 60)
     logger.info("✅ Error handler: включён")
-    logger.info("✅ Таймауты: 30 сек (read/write), 15 сек (connect)")
+    logger.info("✅ Таймауты: write_timeout=60 сек (для больших PDF), read=30 сек, connect=15 сек")
     logger.info("✅ Connection pool: 30 соединений")
     logger.info("✅ Дедупликация уведомлений: включена")
     logger.info("✅ Шумные httpx логи: отключены")
+    logger.info("✅ Команда /getpdf: доступна для получения PDF заказов")
     logger.info("=" * 60)
     
     print("✅ Бот с YooKassa и БД запущен!")
