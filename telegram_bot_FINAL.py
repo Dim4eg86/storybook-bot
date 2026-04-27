@@ -1573,7 +1573,7 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT user_id, name, theme, status FROM orders WHERE id = %s",
+            "SELECT user_id, child_name, theme, status FROM orders WHERE id = %s",
             (order_id,)
         )
         result = cursor.fetchone()
@@ -1584,7 +1584,7 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Заказ #{order_id} не найден")
             return
         
-        user_id_order, name, theme, status = result
+        user_id_order, child_name, theme, status = result
         
         # Формируем путь к PDF
         theme_folders = {
@@ -1609,8 +1609,8 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'knight': 'с_рыцарем'
         }
         
-        folder_name = f"storybook_{name}_{theme_folders.get(theme, theme)}"
-        pdf_filename = f"{name}_{theme_names.get(theme, theme)}.pdf"
+        folder_name = f"storybook_{child_name}_{theme_folders.get(theme, theme)}"
+        pdf_filename = f"{child_name}_{theme_names.get(theme, theme)}.pdf"
         pdf_path = f"{folder_name}/{pdf_filename}"
         
         # Проверяем существование файла
@@ -1635,7 +1635,7 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 filename=pdf_filename,
                 caption=f"📚 Заказ #{order_id}\n"
                         f"👤 User: {user_id_order}\n"
-                        f"📖 {name} - {theme}\n"
+                        f"📖 {child_name} - {theme}\n"
                         f"💾 Размер: {file_size_mb:.1f} MB\n"
                         f"📊 Статус: {status}"
             )
