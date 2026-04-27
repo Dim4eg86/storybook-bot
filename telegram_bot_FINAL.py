@@ -1573,7 +1573,7 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT user_id, child_name, theme, status FROM orders WHERE id = %s",
+            "SELECT user_id, child_name, theme, status, pdf_path FROM orders WHERE order_id = %s",
             (order_id,)
         )
         result = cursor.fetchone()
@@ -1584,34 +1584,16 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Заказ #{order_id} не найден")
             return
         
-        user_id_order, child_name, theme, status = result
+        user_id_order, child_name, theme, status, pdf_path = result
         
-        # Формируем путь к PDF
-        theme_folders = {
-            'robot_city': 'robot_city',
-            'space': 'space',
-            'dinosaurs': 'dinosaurs',
-            'underwater': 'underwater',
-            'fairy_land': 'fairy_land',
-            'princess': 'princess',
-            'unicorns': 'unicorns',
-            'knight': 'knight'
-        }
-        
-        theme_names = {
-            'robot_city': 'в_городе_роботов',
-            'space': 'в_космосе',
-            'dinosaurs': 'с_динозаврами',
-            'underwater': 'под_водой',
-            'fairy_land': 'в_стране_фей',
-            'princess': 'в_королевстве',
-            'unicorns': 'с_единорогами',
-            'knight': 'с_рыцарем'
-        }
-        
-        folder_name = f"storybook_{child_name}_{theme_folders.get(theme, theme)}"
-        pdf_filename = f"{child_name}_{theme_names.get(theme, theme)}.pdf"
-        pdf_path = f"{folder_name}/{pdf_filename}"
+        # Проверяем что PDF путь указан в БД
+        if not pdf_path:
+            await update.message.reply_text(
+                f"❌ PDF путь не найден в БД!\n\n"
+                f"Заказ: #{order_id}\n"
+                f"Статус: {status}"
+            )
+            return
         
         # Проверяем существование файла
         import os
@@ -1620,12 +1602,13 @@ async def getpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"❌ PDF не найден!\n\n"
                 f"Заказ: #{order_id}\n"
                 f"Статус: {status}\n"
-                f"Ожидаемый путь: {pdf_path}"
+                f"Путь из БД: {pdf_path}"
             )
             return
         
         # Отправляем PDF
         file_size_mb = os.path.getsize(pdf_path) / 1024 / 1024
+        pdf_filename = os.path.basename(pdf_path)
         await update.message.reply_text(f"📤 Отправляю PDF заказа #{order_id}...")
         
         with open(pdf_path, 'rb') as pdf_file:
