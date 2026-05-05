@@ -100,10 +100,11 @@ def analyze_photo(photo_path, premium=False):
 
 Ответь ТОЛЬКО в формате JSON (без markdown):
 {
-  "hair_color": "blonde/brown/red/dark/light brown",
-  "hair_color_ru": "светлые/русые/рыжие/тёмные/светло-русые",
-  "hair_style": "straight/curly/wavy/short/long",
-  "hair_style_ru": "прямые/кудрявые/волнистые/короткие/длинные",
+  "has_hair": true/false (если у ребёнка нет волос или очень мало волос - false!),
+  "hair_color": "blonde/brown/red/dark/light brown/none",
+  "hair_color_ru": "светлые/русые/рыжие/тёмные/светло-русые/нет",
+  "hair_style": "straight/curly/wavy/short/long/bald",
+  "hair_style_ru": "прямые/кудрявые/волнистые/короткие/длинные/лысый",
   "eye_color": "blue/brown/green/gray/hazel",
   "eye_color_ru": "голубые/карие/зелёные/серые/ореховые",
   "eye_shape": "round/almond/wide",
@@ -121,6 +122,7 @@ def analyze_photo(photo_path, premium=False):
   "overall_impression": "cheerful cute baby with bright eyes"
 }
 
+ВАЖНО: Если ребёнку меньше 2 лет и волос почти нет - установи has_hair: false!
 Будь максимально детальным - это для ПРЕМИУМ версии!"""
     else:
         # Стандартный анализ
@@ -128,8 +130,9 @@ def analyze_photo(photo_path, premium=False):
 
 Ответ ТОЛЬКО в формате JSON (без markdown):
 {
-  "hair_color": "blonde/brown/red/dark",
-  "hair_color_ru": "светлые/русые/рыжие/тёмные",
+  "has_hair": true/false (если волос нет или очень мало - false),
+  "hair_color": "blonde/brown/red/dark/none",
+  "hair_color_ru": "светлые/русые/рыжие/тёмные/нет",
   "eye_color": "blue/brown/green/gray",
   "eye_color_ru": "голубые/карие/зелёные/серые",
   "features": ["freckles", "glasses"] или [],
@@ -137,6 +140,7 @@ def analyze_photo(photo_path, premium=False):
   "age_estimate": 5-8
 }
 
+Если ребёнку меньше 2 лет и волос почти нет - установи has_hair: false!
 Если что-то не видно - используй "unknown"."""
     
     response = client.messages.create(
@@ -543,8 +547,16 @@ def create_storybook_v2(
         is_premium = (plan == 'premium')
         analysis = analyze_photo(photo_path, premium=is_premium)
         
-        hair_color = analysis.get('hair_color', 'brown') + "-haired"
-        hair_color_ru = analysis.get('hair_color_ru', 'русые')
+        # Проверяем есть ли волосы
+        has_hair = analysis.get('has_hair', True)
+        
+        if has_hair:
+            hair_color = analysis.get('hair_color', 'brown') + "-haired"
+            hair_color_ru = analysis.get('hair_color_ru', 'русые')
+        else:
+            # Для малышей без волос
+            hair_color = "bald baby"
+            hair_color_ru = "лысый малыш"
         
         # Дополнительные детали
         features = ""
@@ -555,8 +567,12 @@ def create_storybook_v2(
         
         # ✅ ПРЕМИУМ: используем ВСЕ детали из анализа
         if is_premium:
-            if analysis.get('hair_style'):
+            # Добавляем hair_style только если есть волосы
+            if has_hair and analysis.get('hair_style'):
                 features += f", {analysis['hair_style']} hair"
+            elif not has_hair:
+                features += ", very little hair"  # Подсказка для Flux
+            
             if analysis.get('eye_shape'):
                 features += f", {analysis['eye_shape']} eyes"
             if analysis.get('face_shape'):
