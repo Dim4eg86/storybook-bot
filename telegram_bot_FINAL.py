@@ -1751,7 +1751,7 @@ async def userinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Информация о пользователе
         cursor.execute("""
-            SELECT first_name, last_name, username, phone 
+            SELECT first_name, last_name, username 
             FROM users 
             WHERE user_id = %s
         """, (target_user_id,))
@@ -1775,7 +1775,7 @@ async def userinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Пользователь {target_user_id} не найден в базе")
             return
         
-        first_name, last_name, username, phone = user_result
+        first_name, last_name, username = user_result
         
         # Формируем ответ
         text = f"👤 *Пользователь {target_user_id}*\n\n"
@@ -1784,8 +1784,6 @@ async def userinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"📛 Фамилия: {last_name}\n"
         if username:
             text += f"🔗 Username: @{username}\n"
-        if phone:
-            text += f"📞 Телефон: {phone}\n"
         
         # Бесплатные кредиты
         if target_user_id in FREE_CREDITS and FREE_CREDITS[target_user_id] > 0:
