@@ -1731,6 +1731,93 @@ async def gift_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
+async def userinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /userinfo <user_id> - показать информацию о пользователе (для админа)"""
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    if not context.args:
+        await update.message.reply_text("❌ Используйте: /userinfo <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        
+        # Получаем информацию из БД
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Информация о пользователе
+        cursor.execute("""
+            SELECT first_name, last_name, username, phone 
+            FROM users 
+            WHERE user_id = %s
+        """, (target_user_id,))
+        
+        user_result = cursor.fetchone()
+        
+        # Последние заказы
+        cursor.execute("""
+            SELECT order_id, child_name, theme, status, created_at
+            FROM orders 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """, (target_user_id,))
+        
+        orders = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if not user_result:
+            await update.message.reply_text(f"❌ Пользователь {target_user_id} не найден в базе")
+            return
+        
+        first_name, last_name, username, phone = user_result
+        
+        # Формируем ответ
+        text = f"👤 *Пользователь {target_user_id}*\n\n"
+        text += f"📛 Имя: {first_name or '—'}\n"
+        if last_name:
+            text += f"📛 Фамилия: {last_name}\n"
+        if username:
+            text += f"🔗 Username: @{username}\n"
+        if phone:
+            text += f"📞 Телефон: {phone}\n"
+        
+        # Бесплатные кредиты
+        if target_user_id in FREE_CREDITS and FREE_CREDITS[target_user_id] > 0:
+            text += f"\n🎁 Бесплатных книг: {FREE_CREDITS[target_user_id]}\n"
+        
+        if orders:
+            text += f"\n📚 *Последние заказы:*\n"
+            for order_id, child_name, theme, status, created_at in orders:
+                status_emoji = {
+                    'pending': '⏳',
+                    'paid': '💳',
+                    'processing': '⚙️',
+                    'completed': '✅',
+                    'failed': '❌',
+                    'refunded': '💰'
+                }.get(status, '❓')
+                
+                # Форматируем дату
+                date_str = created_at.strftime('%d.%m.%Y') if created_at else '—'
+                
+                text += f"• #{order_id}: {child_name} - {theme} {status_emoji} ({date_str})\n"
+        else:
+            text += f"\n📚 Заказов нет"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+        
+    except ValueError:
+        await update.message.reply_text("❌ Неверный формат user_id")
+    except Exception as e:
+        logger.error(f"Ошибка в userinfo_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
 
 async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Аналитика бота - только для админа"""
@@ -1952,6 +2039,7 @@ def main():
     application.add_handler(CommandHandler('gift', gift_command))  # Подарить книгу
     application.add_handler(CommandHandler('getpdf', getpdf_command))  # Получить PDF заказа
     application.add_handler(CommandHandler('dbinfo', dbinfo_command))  # Показать структуру БД
+    application.add_handler(CommandHandler('userinfo', userinfo_command))  # Информация о пользователе
     application.add_handler(CallbackQueryHandler(view_failed_orders_callback, pattern='^view_failed_orders$'))
     application.add_handler(CommandHandler('myid', myid_command))
     application.add_handler(CommandHandler('analytics', analytics_command))
@@ -1970,6 +2058,7 @@ def main():
     logger.info("✅ Дедупликация уведомлений: включена")
     logger.info("✅ Шумные httpx логи: отключены")
     logger.info("✅ Команда /getpdf: доступна для получения PDF заказов")
+    logger.info("✅ Команда /userinfo: доступна для информации о пользователях")
     logger.info("=" * 60)
     
     print("✅ Бот с YooKassa и БД запущен!")
