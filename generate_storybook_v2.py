@@ -144,7 +144,7 @@ def analyze_photo(photo_path, premium=False):
 Если что-то не видно - используй "unknown"."""
     
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=800 if premium else 500,
         messages=[{
             "role": "user",
